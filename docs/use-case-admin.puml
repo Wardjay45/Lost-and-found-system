@@ -1,0 +1,74 @@
+@startuml Admin Dashboard - Use Case Diagram
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam defaultFontSize 13
+
+actor "Admin" as Admin
+
+rectangle "Admin Dashboard" {
+
+  package "Authentication" #White {
+    usecase "Login" as UC_Login
+    usecase "Logout" as UC_Logout
+  }
+
+  package "Dashboard & Analytics" #LightCyan {
+    usecase "View Dashboard Stats" as UC_Dash
+    usecase "View Analytics & Reports" as UC_Anal
+    usecase "View Activity Logs" as UC_Logs
+  }
+
+  package "Item Management" #HoneyDew {
+    usecase "View / Search\nLost Items" as UC_Lost
+    usecase "View / Search\nFound Items" as UC_Found
+    usecase "Edit / Delete Items" as UC_Edit
+    usecase "Browse Unclaimed Items" as UC_Unclaimed
+  }
+
+  package "QR Locations" #LightYellow {
+    usecase "Manage QR Locations" as UC_QR
+  }
+
+  package "Smart Matching" #AliceBlue {
+    usecase "View AI Match Results" as UC_Match
+  }
+
+  package "Claims & Messaging" #Lavender {
+    usecase "Manage Claims" as UC_Claims
+    usecase "Manage Messages" as UC_Msg
+  }
+
+  package "User & Category Management" #MistyRose {
+    usecase "Manage Categories" as UC_Cat
+    usecase "View / Edit Users" as UC_Users
+    usecase "Manage User Roles" as UC_Roles
+  }
+
+  package "System" #White {
+    usecase "System Settings" as UC_Settings
+    usecase "View Feedback" as UC_Fb
+  }
+
+}
+
+Admin --> UC_Login
+Admin --> UC_Logout
+Admin --> UC_Dash
+Admin --> UC_Anal
+Admin --> UC_Logs
+Admin --> UC_Lost
+Admin --> UC_Found
+Admin --> UC_Edit
+Admin --> UC_Unclaimed
+Admin --> UC_QR
+Admin --> UC_Match
+Admin --> UC_Claims
+Admin --> UC_Msg
+Admin --> UC_Cat
+Admin --> UC_Users
+Admin --> UC_Roles
+Admin --> UC_Settings
+Admin --> UC_Fb
+
+@enduml

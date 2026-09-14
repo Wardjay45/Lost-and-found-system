@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Lost & Found",
+    "slug": "lost-and-found-mobile",
+    "version": "1.0.0",
+    "sdkVersion": "55.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.university.lostandfound",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app needs microphone access to convert your speech to text when filling report forms."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.university.lostandfound",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "lostandfound",
+              "host": "report",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "scheme": "lostandfound",
+    "extra": {
+      "eas": {
+        "projectId": "b779cd91-812b-4d3b-ba2b-188c47eb3d45"
+      }
+    }
+  }
+}

@@ -1,0 +1,123 @@
+@startuml DFD Level 1 - Decomposition Diagram (Gane & Sarson)
+
+left to right direction
+skinparam defaultFontSize 11
+skinparam defaultFontName "Segoe UI"
+
+skinparam rectangle<<external>> {
+  BackgroundColor #dbeafe
+  BorderColor #2563eb
+  BorderThickness 2
+}
+
+skinparam rectangle<<process>> {
+  BackgroundColor #f0fdf4
+  BorderColor #16a34a
+  BorderThickness 2
+  RoundCorner 25
+}
+
+skinparam storage<<datastore>> {
+  BackgroundColor #fefce8
+  BorderColor #ca8a04
+  BorderThickness 2
+}
+
+title **Level 1 DFD - Lost & Found System**
+
+rectangle "**End User**\n(Mobile App)" <<external>> as User
+rectangle "**Admin**\n(Web Dashboard)" <<external>> as Admin
+rectangle "**AI Services**\n(Python/FastAPI\n+ Deepgram STT)" <<external>> as AIServer
+
+rectangle "**1.0**\nAuthentication\n& Registration" <<process>> as P1
+rectangle "**2.0**\nItem Management\nReport - Search - Browse\nEdit/Delete" <<process>> as P2
+rectangle "**3.0**\nAI & Speech Services\nSmart Matching - STT\nAuto-Embedding Poller" <<process>> as P3
+rectangle "**4.0**\nClaims & Messaging\nClaim - FTF Verify\nHandover - Messages" <<process>> as P4
+rectangle "**5.0**\nAdmin Panel\nDashboard - Analytics\nUsers - Categories\nUnclaimed - Settings" <<process>> as P5
+
+storage "**D1** Users" <<datastore>> as DS1
+storage "**D2** Lost Items\n(+embeddings)" <<datastore>> as DS2
+storage "**D3** Found Items\n(+embeddings)" <<datastore>> as DS3
+storage "**D4** Matches" <<datastore>> as DS4
+storage "**D5** Messages &\nConversations" <<datastore>> as DS5
+storage "**D6** Categories" <<datastore>> as DS6
+storage "**D7** Activity Logs" <<datastore>> as DS7
+
+User -down-> P1 : Registration/Login Data
+User -down-> P2 : Lost/Found Item Report\n(photo, desc, category)
+User -down-> P2 : Search/Browse Query
+User -down-> P3 : Match Request\n(description / image)
+User -down-> P3 : Audio Recording (base64)
+User -down-> P4 : Claim Proof / FTF Verification
+User -down-> P4 : Message Content
+User -down-> P4 : Handover Schedule Request
+
+P1 -up-> User : Auth Token / Session
+P2 -up-> User : Item List / Search Results / Timeline
+P3 -up-> User : AI Matches / Ranked Suggestions
+P3 -up-> User : Transcribed Text
+P4 -up-> User : Claim Status / Handover Details
+P4 -up-> User : Message Replies / Unread Count
+
+Admin -down-> P1 : Admin Login Credentials
+Admin -down-> P2 : Item Edit/Delete Commands
+Admin -down-> P3 : View Match Results Request
+Admin -down-> P4 : Manage Claims / Reply Messages
+Admin -down-> P5 : Dashboard/Analytics Request
+Admin -down-> P5 : User/Role Management Data
+Admin -down-> P5 : Category CRUD Data
+Admin -down-> P5 : Unclaimed Items Request
+Admin -down-> P5 : System Settings Data
+
+P1 -up-> Admin : Admin Auth Token
+P2 -up-> Admin : Item Update/Delete Confirmation
+P3 -up-> Admin : Match Details / Reports
+P4 -up-> Admin : Message Threads / Conversations
+P5 -up-> Admin : Dashboard Charts / Stats
+P5 -up-> Admin : Activity Logs / Audit Trail
+P5 -up-> Admin : User & Item Lists / Reports
+P5 -up-> Admin : Unclaimed Item Reports
+P5 -up-> Admin : Settings Confirmation
+
+P3 -down-> AIServer : Item Descriptions/Images
+P3 -down-> AIServer : Embedding Requests
+P3 -down-> AIServer : Audio Data (base64)
+AIServer -up-> P3 : Text/Image Embeddings
+AIServer -up-> P3 : Match Scores & Rankings
+AIServer -up-> P3 : Auto-match Suggestions
+AIServer -up-> P3 : Transcription Text
+
+P1 -down-> DS1 : Create/Update User
+DS1 -up-> P1 : User Account / Credentials
+P2 -down-> DS2 : Create/Update Lost Item
+DS2 -up-> P2 : Lost Item Records
+P2 -down-> DS3 : Create/Update Found Item
+DS3 -up-> P2 : Found Item Records
+DS6 -up-> P2 : Category List
+DS2 -up-> P3 : Lost Item Data
+P3 -down-> DS2 : Lost Item Embeddings
+DS3 -up-> P3 : Found Item Data
+P3 -down-> DS3 : Found Item Embeddings
+P3 -down-> DS4 : Match Results
+DS4 -up-> P3 : Stored Match Data
+P4 -down-> DS2 : Lost Item Status
+P4 -down-> DS3 : Found Item Status
+P4 -down-> DS5 : Messages / Conversations
+DS5 -up-> P4 : Messages / Conversations
+DS1 -up-> P4 : User Info
+P5 -down-> DS1 : User/Role Updates
+DS1 -up-> P5 : User List / Role Data
+DS2 -up-> P5 : Lost Item Data / Stats
+DS3 -up-> P5 : Found Item Data / Stats
+DS4 -up-> P5 : Match Data / Stats
+P5 -down-> DS6 : Category Changes
+DS6 -up-> P5 : Category List
+DS7 -up-> P5 : Activity Logs
+
+P1 -down-> DS7 : Login/Registration Log
+P2 -down-> DS7 : Item Report/Edit Log
+P3 -down-> DS7 : Match/Embedding/STT Log
+P4 -down-> DS7 : Claim/Handover/Message Log
+P5 -down-> DS7 : Admin Action Log
+
+@enduml

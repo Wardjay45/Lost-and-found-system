@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tech Stack – Lost & Found System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      padding: 40px;
+      line-height: 1.7;
+    }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, #818cf8, #a5b4fc, #c4b5fd);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .subtitle { color: #64748b; font-size: 1rem; margin-bottom: 40px; }
+    h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #a5b4fc;
+      margin: 32px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid rgba(129, 140, 248, 0.15);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(129, 140, 248, 0.12);
+      border-radius: 16px;
+      padding: 20px;
+      transition: all 0.2s;
+    }
+    .card:hover {
+      border-color: rgba(129, 140, 248, 0.3);
+      background: rgba(30, 41, 59, 0.9);
+      transform: translateY(-2px);
+    }
+    .card-icon { font-size: 28px; margin-bottom: 10px; }
+    .card-name { font-weight: 700; font-size: 0.95rem; color: #e2e8f0; }
+    .card-desc { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
+    .badge {
+      display: inline-block;
+      background: rgba(79, 70, 229, 0.15);
+      color: #a5b4fc;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-top: 8px;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(129, 140, 248, 0.08);
+      font-size: 0.9rem;
+    }
+    th {
+      color: #94a3b8;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 700;
+    }
+    td { color: #cbd5e1; }
+    td:first-child { color: #a5b4fc; font-weight: 600; }
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.2), transparent);
+      margin: 40px 0;
+    }
+    .arch-section {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(129, 140, 248, 0.1);
+      border-radius: 20px;
+      padding: 30px;
+      margin-bottom: 24px;
+    }
+    .arch-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(129, 140, 248, 0.06);
+    }
+    .arch-row:last-child { border-bottom: none; }
+    .arch-label {
+      min-width: 140px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: #818cf8;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .arch-value { color: #cbd5e1; font-size: 0.9rem; flex: 1; }
+    .footer {
+      text-align: center;
+      color: #475569;
+      font-size: 0.8rem;
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(129, 140, 248, 0.06);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Tech Stack</h1>
+    <p class="subtitle">University Lost & Found Management System<br>Last updated: July 2026</p>
+
+    <!-- Architecture Overview -->
+    <h2>🏗️ Architecture Overview</h2>
+    <div class="arch-section">
+      <div class="arch-row">
+        <span class="arch-label">Frontend (Admin)</span>
+        <span class="arch-value">React 19 + Vite 8 + Tailwind CSS 4 — SPA dashboard for administrators</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-label">Frontend (Mobile)</span>
+        <span class="arch-value">React Native 0.83 + Expo SDK 55 — iOS & Android cross-platform app</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-label">Backend API</span>
+        <span class="arch-value">Express.js 5 — REST API server on port 3001</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-label">AI Server</span>
+        <span class="arch-value">FastAPI (Python 3) + Sentence Transformers + CLIP — embedding generation on port 8000</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-label">Database</span>
+        <span class="arch-value">Supabase (PostgreSQL) — hosted relational database with built-in storage & auth</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-label">File Storage</span>
+        <span class="arch-value">Supabase Storage — image uploads for lost/found items</span>
+      </div>
+    </div>
+
+    <!-- Admin Web Frontend -->
+    <h2>🖥️ Admin Web Dashboard</h2>
+    <table>
+      <tr><th>Technology</th><th>Version</th><th>Purpose</th></tr>
+      <tr><td>React</td><td>19.2</td><td>UI library — component-based SPA</td></tr>
+      <tr><td>Vite</td><td>8.1</td><td>Bundler & dev server (ESM native, HMR)</td></tr>
+      <tr><td>React Router DOM</td><td>7.18</td><td>Client-side routing for admin pages</td></tr>
+      <tr><td>Tailwind CSS</td><td>4.3</td><td>Utility-first CSS framework with dark mode</td></tr>
+      <tr><td>Chart.js</td><td>4.5</td><td>Charting library for dashboard analytics</td></tr>
+      <tr><td>react-chartjs-2</td><td>5.3</td><td>React wrapper for Chart.js</td></tr>
+      <tr><td>Heroicons (React)</td><td>2.2</td><td>Beautiful SVG icon library</td></tr>
+      <tr><td>Oxlint</td><td>1.71</td><td>JavaScript/TypeScript linter (fast)</td></tr>
+    </table>
+
+    <!-- Mobile App -->
+    <h2>📱 Mobile App (iOS & Android)</h2>
+    <table>
+      <tr><th>Technology</th><th>Version</th><th>Purpose</th></tr>
+      <tr><td>React Native</td><td>0.83</td><td>Cross-platform native app framework</td></tr>
+      <tr><td>Expo SDK</td><td>55.0</td><td>Managed React Native toolchain</td></tr>
+      <tr><td>React Navigation</td><td>6.x</td><td>Stack + Bottom Tab navigation</td></tr>
+      <tr><td>Expo Image Picker</td><td>55.0</td><td>Camera & gallery image selection with crop</td></tr>
+      <tr><td>Expo File System</td><td>55.0</td><td>File system access (base64 conversion)</td></tr>
+      <tr><td>Expo Speech (TTS)</td><td>55.0</td><td>Text-to-speech for accessibility</td></tr>
+      <tr><td>Expo AV</td><td>16.0</td><td>Audio playback for voice messages</td></tr>
+      <tr><td>Expo Camera</td><td>55.0</td><td>Camera view for QR scanning</td></tr>
+      <tr><td>React Native WebView</td><td>13.16</td><td>WebView for embedded content</td></tr>
+      <tr><td>React Native Gesture Handler</td><td>2.30</td><td>Native gesture support</td></tr>
+      <tr><td>React Native Safe Area Context</td><td>5.6</td><td>Safe area insets for notched devices</td></tr>
+      <tr><td>React Native Screens</td><td>4.23</td><td>Native screen containers (performance)</td></tr>
+    </table>
+
+    <!-- Backend Server -->
+    <h2>⚙️ Backend API Server</h2>
+    <table>
+      <tr><th>Technology</th><th>Version</th><th>Purpose</th></tr>
+      <tr><td>Node.js</td><td>22+</td><td>JavaScript runtime</td></tr>
+      <tr><td>Express.js</td><td>5.2</td><td>Web framework for REST API</td></tr>
+      <tr><td>Supabase JS Client</td><td>2.110</td><td>Database queries & storage operations</td></tr>
+      <tr><td>bcryptjs</td><td>3.0</td><td>Password hashing for user auth</td></tr>
+      <tr><td>jsonwebtoken</td><td>9.0</td><td>JWT token generation & verification</td></tr>
+      <tr><td>Multer</td><td>2.2</td><td>Multipart file upload handling</td></tr>
+      <tr><td>QRCode</td><td>1.5</td><td>QR code generation</td></tr>
+      <tr><td>CORS</td><td>2.8</td><td>Cross-Origin Resource Sharing</td></tr>
+      <tr><td>dotenv</td><td>17.4</td><td>Environment variable loading</td></tr>
+    </table>
+
+    <!-- AI Server -->
+    <h2>🧠 AI & Machine Learning Server</h2>
+    <table>
+      <tr><th>Technology</th><th>Version</th><th>Purpose</th></tr>
+      <tr><td>Python</td><td>3.11+</td><td>ML runtime</td></tr>
+      <tr><td>FastAPI</td><td>0.115</td><td>High-performance async API framework</td></tr>
+      <tr><td>Uvicorn</td><td>0.34</td><td>ASGI server for FastAPI</td></tr>
+      <tr><td>Sentence Transformers</td><td>3.4</td><td>Text embedding model (E5-base-v2)</td></tr>
+      <tr><td>Transformers (Hugging Face)</td><td>4.50+</td><td>CLIP model for image understanding</td></tr>
+      <tr><td>PyTorch</td><td>2.6+</td><td>Deep learning framework</td></tr>
+      <tr><td>CLIP (ViT-B/32)</td><td>—</td><td>Vision-language model for image embeddings</td></tr>
+      <tr><td>Pillow</td><td>11.1</td><td>Python Imaging Library for image processing</td></tr>
+      <tr><td>NumPy</td><td>2.2</td><td>Numerical computing & array ops</td></tr>
+      <tr><td>python-multipart</td><td>0.0.20</td><td>Multipart form parsing</td></tr>
+    </table>
+
+    <!-- Database & Infrastructure -->
+    <h2>🗄️ Database & Infrastructure</h2>
+    <table>
+      <tr><th>Technology</th><th>Version</th><th>Purpose</th></tr>
+      <tr><td>Supabase</td><td>—</td><td>Managed PostgreSQL + Storage + Auth</td></tr>
+      <tr><td>PostgreSQL</td><td>15+</td><td>Relational database (via Supabase)</td></tr>
+      <tr><td>Supabase Storage</td><td>—</td><td>Image/file storage for items</td></tr>
+      <tr><td>Supabase Auth</td><td>—</td><td>Backing auth infrastructure (JWT)</td></tr>
+    </table>
+
+    <!-- Key Features -->
+    <h2>🔑 Key AI/ML Features</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">🔍</div>
+        <div class="card-name">Smart Matching</div>
+        <div class="card-desc">Cosine similarity between lost and found item embeddings to auto-match items</div>
+        <span class="badge">AI</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📝</div>
+        <div class="card-name">Text Embeddings</div>
+        <div class="card-desc">E5-base-v2 model converts item descriptions into 768-dimensional vectors</div>
+        <span class="badge">NLP</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🖼️</div>
+        <div class="card-name">Image Embeddings</div>
+        <div class="card-desc">CLIP ViT-B/32 generates 512-dimensional visual feature vectors</div>
+        <span class="badge">Computer Vision</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🎤</div>
+        <div class="card-name">Speech Recognition</div>
+        <div class="card-desc">Deepgram API integration for voice-to-text input on mobile</div>
+        <span class="badge">Speech</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔊</div>
+        <div class="card-name">Text-to-Speech</div>
+        <div class="card-desc">Expo Speech for accessibility announcements and screen reading</div>
+        <span class="badge">Accessibility</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📷</div>
+        <div class="card-name">QR Code System</div>
+        <div class="card-desc">QR codes on physical locations for quick reporting & claiming</div>
+        <span class="badge">Location</span>
+      </div>
+    </div>
+
+    <!-- Sessions & Real-time -->
+    <h2>🔐 Authentication & Security</h2>
+    <table>
+      <tr><th>Feature</th><th>Implementation</th></tr>
+      <tr><td>Password Hashing</td><td>bcrypt (10 salt rounds)</td></tr>
+      <tr><td>Token-based Auth</td><td>JWT (7-day expiry, HS256)</td></tr>
+      <tr><td>Role-based Access</td><td>superadmin / student / staff roles</td></tr>
+      <tr><td>Account Status</td><td>active / suspended / archived states</td></tr>
+      <tr><td>CORS</td><td>Configured for all origins (development)</td></tr>
+    </table>
+
+    <!-- Dev Tools -->
+    <h2>🛠️ Development Tools</h2>
+    <table>
+      <tr><th>Tool</th><th>Purpose</th></tr>
+      <tr><td>VS Code</td><td>Primary IDE with ESLint, Prettier, Tailwind CSS IntelliSense</td></tr>
+      <tr><td>Expo CLI</td><td>Build, test, and deploy the mobile app</td></tr>
+      <tr><td>Expo Go</td><td>Mobile app preview/testing on device</td></tr>
+      <tr><td>npm / Node.js</td><td>Package management and runtime</td></tr>
+      <tr><td>pip (Python)</td><td>AI server dependency management</td></tr>
+      <tr><td>Git</td><td>Version control</td></tr>
+      <tr><td>Supabase Dashboard</td><td>Database management, SQL editor, storage browser</td></tr>
+    </table>
+
+    <div class="divider"></div>
+
+    <!-- Summary -->
+    <h2>📊 Stack Summary</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">🟦</div>
+        <div class="card-name">Frontend</div>
+        <div class="card-desc">React 19 · Vite 8 · Tailwind CSS 4<br>React Router 7 · Chart.js 4</div>
+        <span class="badge">JavaScript</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📱</div>
+        <div class="card-name">Mobile</div>
+        <div class="card-desc">React Native 0.83 · Expo 55<br>React Navigation 6 · Expo Modules</div>
+        <span class="badge">JavaScript</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🟢</div>
+        <div class="card-name">Backend API</div>
+        <div class="card-desc">Node.js · Express 5<br>Supabase Client · JWT · Multer</div>
+        <span class="badge">JavaScript</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🟡</div>
+        <div class="card-name">AI Server</div>
+        <div class="card-desc">FastAPI · PyTorch · Sentence Transformers<br>CLIP ViT-B/32 · E5-base-v2</div>
+        <span class="badge">Python</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🐘</div>
+        <div class="card-name">Database</div>
+        <div class="card-desc">PostgreSQL 15+ via Supabase<br>Row-Level Security · Real-time</div>
+        <span class="badge">SQL</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">☁️</div>
+        <div class="card-name">Storage</div>
+        <div class="card-desc">Supabase Storage<br>CDN-backed public URLs</div>
+        <span class="badge">Cloud</span>
+      </div>
+    </div>
+
+    <div class="footer">
+      Lost & Found Management System · University Project · Tech Stack Documentation
+    </div>
+  </div>
+</body>
+</html>

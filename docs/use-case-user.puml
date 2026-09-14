@@ -1,0 +1,110 @@
+@startuml Mobile App - Use Case Diagram
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam defaultFontSize 13
+
+actor "End User\n(Mobile)" as User
+actor "AI System\n(External)" as AI
+
+rectangle "Mobile App" {
+
+  package "Authentication" #White {
+    usecase "Register / Sign Up" as UC_Reg
+    usecase "Login" as UC_Login
+    usecase "Logout" as UC_Logout
+  }
+
+  package "Lost Items" #LightYellow {
+    usecase "Report Lost Item\n(photo + description)" as UC_RepLost
+    usecase "View / Edit\nMy Lost Items" as UC_ViewLost
+  }
+
+  package "Found Items" #HoneyDew {
+    usecase "Report Found Item\n(photo + QR scan)" as UC_RepFound
+    usecase "View / Edit\nMy Found Items" as UC_ViewFound
+  }
+
+  package "QR Codes" #Lavender {
+    usecase "Scan QR Code" as UC_ScanQR
+  }
+
+  package "Smart Matching" #AliceBlue {
+    usecase "Run Text Match" as UC_TxtMatch
+    usecase "Run Image Match" as UC_ImgMatch
+    usecase "View Match Results" as UC_ResMatch
+  }
+
+  package "Voice Input" #LightCyan {
+    usecase "Dictate Description\n(Speech-to-Text)" as UC_Speech
+  }
+
+  package "Claims & Handover" #MistyRose {
+    usecase "Claim a Found Item" as UC_Claim
+    usecase "Verify Ownership" as UC_Verify
+    usecase "Schedule Pickup" as UC_Pickup
+    usecase "Track Claim Status" as UC_Track
+  }
+
+  package "Messages" #White {
+    usecase "Send / View Messages" as UC_Msg
+  }
+
+  package "Browse" #LightYellow {
+    usecase "Browse Unclaimed Items" as UC_Browse
+  }
+
+  package "Profile" #HoneyDew {
+    usecase "Edit Profile" as UC_Prof
+    usecase "View Timeline" as UC_TL
+    usecase "View Notifications" as UC_Notif
+  }
+
+  package "Settings & Accessibility" #AliceBlue {
+    usecase "App Settings" as UC_Settings
+    usecase "TTS / Accessibility" as UC_TTS
+  }
+
+  package "Feedback" #White {
+    usecase "Submit Feedback" as UC_Fb
+  }
+
+}
+
+User --> UC_Reg
+User --> UC_Login
+User --> UC_Logout
+User --> UC_RepLost
+User --> UC_ViewLost
+User --> UC_RepFound
+User --> UC_ViewFound
+User --> UC_ScanQR
+User --> UC_TxtMatch
+User --> UC_ImgMatch
+User --> UC_ResMatch
+User --> UC_Speech
+User --> UC_Claim
+User --> UC_Verify
+User --> UC_Pickup
+User --> UC_Track
+User --> UC_Msg
+User --> UC_Browse
+User --> UC_Prof
+User --> UC_TL
+User --> UC_Notif
+User --> UC_Settings
+User --> UC_TTS
+User --> UC_Fb
+
+AI --> UC_TxtMatch
+AI --> UC_ImgMatch
+AI --> UC_Speech
+
+UC_Login ..> UC_Reg : <<extend>>
+UC_TxtMatch ..> UC_ResMatch : <<include>>
+UC_ImgMatch ..> UC_ResMatch : <<include>>
+UC_Claim ..> UC_Verify : <<include>>
+UC_Claim ..> UC_Pickup : <<extend>>
+UC_RepFound ..> UC_ScanQR : <<extend>>
+
+@enduml

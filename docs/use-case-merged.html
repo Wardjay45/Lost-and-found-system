@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lost & Found System - Use Case Diagram (Merged)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #eee;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    color: #a5b4fc;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #94a3b8;
+    margin-bottom: 24px;
+    font-size: 14px;
+  }
+  .merged-container {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .diagram-panel {
+    background: #16213e;
+    border: 1px solid #2a3a5c;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    flex: 1;
+    min-width: 500px;
+    max-width: 900px;
+  }
+  .panel-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    text-align: center;
+  }
+  .panel-title.admin { background: #1e3a5f; color: #7dd3fc; }
+  .panel-title.user  { background: #2d1b3d; color: #c084fc; }
+  .diagram-wrapper {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+    min-height: 400px;
+  }
+  .diagram-wrapper img, .diagram-wrapper object {
+    max-width: 100%;
+    height: auto;
+  }
+  .legend {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-top: 20px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #94a3b8;
+  }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .legend .dot {
+    width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+  }
+</style>
+</head>
+<body>
+
+<h1>Lost & Found System — Use Case Diagram</h1>
+<p class="subtitle">3 Actors · 40+ Use Cases · 20 Functional Areas</p>
+
+<div class="merged-container">
+  <div class="diagram-panel">
+    <div class="panel-title admin">🖥️ Admin Dashboard (Web)</div>
+    <div class="diagram-wrapper">
+      <object data="use-case-admin.svg" type="image/svg+xml" width="100%">
+        <img src="use-case-admin.svg" alt="Admin Use Case Diagram" style="width:100%">
+      </object>
+    </div>
+  </div>
+  <div class="diagram-panel">
+    <div class="panel-title user">📱 Mobile App (End User + AI)</div>
+    <div class="diagram-wrapper">
+      <object data="use-case-user.svg" type="image/svg+xml" width="100%">
+        <img src="use-case-user.svg" alt="User Use Case Diagram" style="width:100%">
+      </object>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:#fef08a"></span> End User use cases</span>
+  <span><span class="dot" style="background:#bfdbfe"></span> AI-powered use cases</span>
+  <span><span class="dot" style="background:#a5f3fc"></span> Admin-only use cases</span>
+  <span>···▶ <b>&laquo;extend&raquo;</b> = optional</span>
+  <span>···▶ <b>&laquo;include&raquo;</b> = required</span>
+</div>
+
+</body>
+</html>

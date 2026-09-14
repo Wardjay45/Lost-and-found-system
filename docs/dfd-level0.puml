@@ -1,0 +1,68 @@
+@startuml DFD Level 0 - Context Diagram (Gane & Sarson)
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam defaultFontName "Segoe UI"
+
+skinparam rectangle<<external>> {
+  BackgroundColor #dbeafe
+  BorderColor #2563eb
+  BorderThickness 2
+}
+
+skinparam rectangle<<process>> {
+  BackgroundColor #e8f4fd
+  BorderColor #1e40af
+  BorderThickness 3
+  RoundCorner 25
+}
+
+title **Context Diagram - Lost & Found System**
+
+rectangle "**End User**\n(Mobile App)" <<external>> as User
+rectangle "**Admin**\n(Web Dashboard)" <<external>> as Admin
+rectangle "**AI Services**\n(Python/FastAPI\n+ Deepgram STT)" <<external>> as AIServer
+
+rectangle "**0**\nLost & Found\nSystem\n(Express + Supabase)" <<process>> as Process0
+
+User -down-> Process0 : Login/Registration Details
+User -down-> Process0 : Lost/Found Item Report\n(photo, description, category)
+User -down-> Process0 : Search/Browse Query
+User -down-> Process0 : Claim/Verification Proof
+User -down-> Process0 : Message Content
+User -down-> Process0 : AI Match Request
+User -down-> Process0 : Audio Recording Data
+
+Process0 -up-> User : Auth Token / Session
+Process0 -up-> User : Item Confirmation / List
+Process0 -up-> User : Match Results / Suggestions
+Process0 -up-> User : Claim Status / Handover Schedule
+Process0 -up-> User : Message Replies / Notifications
+Process0 -up-> User : Timeline / Status Updates
+
+Admin -down-> Process0 : Login Credentials
+Admin -down-> Process0 : Dashboard / Analytics Request
+Admin -down-> Process0 : Item Edit/Delete Commands
+Admin -down-> Process0 : User/Role Management Commands
+Admin -down-> Process0 : Category Management Data
+Admin -down-> Process0 : Message Reply Content
+Admin -down-> Process0 : Unclaimed Items Request
+Admin -down-> Process0 : System Settings Data
+
+Process0 -up-> Admin : Dashboard Stats / Charts
+Process0 -up-> Admin : Activity Logs / Audit Trail
+Process0 -up-> Admin : User & Item Lists
+Process0 -up-> Admin : Item Update/Delete Confirmation
+Process0 -up-> Admin : Unclaimed Item Reports
+Process0 -up-> Admin : Settings Confirmation
+
+AIServer -up-> Process0 : Text/Image Embeddings
+AIServer -up-> Process0 : Match Scores & Rankings
+AIServer -up-> Process0 : Auto-match Suggestions
+AIServer -up-> Process0 : Transcription Text
+
+Process0 -down-> AIServer : Item Descriptions & Images
+Process0 -down-> AIServer : Embedding Poll Requests
+Process0 -down-> AIServer : Audio Data (base64)
+
+@enduml

@@ -1,0 +1,293 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #4f46e5;
+  --color-primary-light: #818cf8;
+  --color-primary-dark: #3730a3;
+}
+
+:root {
+  --primary: #4f46e5;
+  --primary-light: #818cf8;
+  --primary-dark: #3730a3;
+  --secondary: #0ea5e9;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   60 / 30 / 10  COLOUR THEME TOKENS
+   Applied via  data-theme="..."  on <html>
+   60% = dominant background canvas
+   30% = surfaces (sidebar, header, cards)
+   10% = accent (amber active state, CTAs)
+══════════════════════════════════════════════════════════════ */
+
+/* ── Lavender (default) ── */
+:root,
+[data-theme="lavender"] {
+  --lf-60:          #EAE7F5;
+  --lf-30:          #DDD8EF;
+  --lf-30-border:   #C9C2E3;
+  --lf-10:          #F59E0B;
+  --lf-10-bg:       rgba(245,158,11,0.13);
+  --lf-10-active:   #92580A;
+  --lf-text-primary:#2D2550;
+  --lf-text-muted:  #7668A8;
+  --lf-hover:       #CFC9E6;
+  --lf-orb-a:       rgba(245,158,11,0.06);
+  --lf-orb-b:       rgba(109,96,180,0.07);
+}
+
+/* ── Midnight (deep navy) ── */
+[data-theme="midnight"] {
+  --lf-60:          #1C1F2E;
+  --lf-30:          #141622;
+  --lf-30-border:   #2A2D40;
+  --lf-10:          #F59E0B;
+  --lf-10-bg:       rgba(245,158,11,0.14);
+  --lf-10-active:   #FBBF24;
+  --lf-text-primary:#E8EAFF;
+  --lf-text-muted:  #8890B8;
+  --lf-hover:       #23263A;
+  --lf-orb-a:       rgba(245,158,11,0.05);
+  --lf-orb-b:       rgba(99,102,241,0.07);
+}
+
+/* ── Ocean (teal-blue) ── */
+[data-theme="ocean"] {
+  --lf-60:          #E6F3F7;
+  --lf-30:          #D2EAF0;
+  --lf-30-border:   #B4D7E2;
+  --lf-10:          #0EA5E9;
+  --lf-10-bg:       rgba(14,165,233,0.13);
+  --lf-10-active:   #0369A1;
+  --lf-text-primary:#0C3345;
+  --lf-text-muted:  #4A7E96;
+  --lf-hover:       #BDD8E4;
+  --lf-orb-a:       rgba(14,165,233,0.06);
+  --lf-orb-b:       rgba(20,184,166,0.07);
+}
+
+/* ── Forest (green) ── */
+[data-theme="forest"] {
+  --lf-60:          #E6F3EC;
+  --lf-30:          #D1EAD9;
+  --lf-30-border:   #A8D4B5;
+  --lf-10:          #10B981;
+  --lf-10-bg:       rgba(16,185,129,0.13);
+  --lf-10-active:   #065F46;
+  --lf-text-primary:#0D2B1D;
+  --lf-text-muted:  #3D7A56;
+  --lf-hover:       #BDD9C8;
+  --lf-orb-a:       rgba(16,185,129,0.07);
+  --lf-orb-b:       rgba(5,150,105,0.06);
+}
+
+/* ── Rose ── */
+[data-theme="rose"] {
+  --lf-60:          #F7EEF3;
+  --lf-30:          #EED9E6;
+  --lf-30-border:   #DBBECE;
+  --lf-10:          #EC4899;
+  --lf-10-bg:       rgba(236,72,153,0.12);
+  --lf-10-active:   #9D174D;
+  --lf-text-primary:#3B0C24;
+  --lf-text-muted:  #87446A;
+  --lf-hover:       #E0C5D5;
+  --lf-orb-a:       rgba(236,72,153,0.06);
+  --lf-orb-b:       rgba(168,85,247,0.06);
+}
+
+/* ── Slate (neutral, minimal) ── */
+[data-theme="slate"] {
+  --lf-60:          #ECEEF2;
+  --lf-30:          #DDE0E8;
+  --lf-30-border:   #C5CAD5;
+  --lf-10:          #6366F1;
+  --lf-10-bg:       rgba(99,102,241,0.12);
+  --lf-10-active:   #3730A3;
+  --lf-text-primary:#1E2333;
+  --lf-text-muted:  #5A6278;
+  --lf-hover:       #CDD0DB;
+  --lf-orb-a:       rgba(99,102,241,0.05);
+  --lf-orb-b:       rgba(14,165,233,0.05);
+}
+
+/* ════════════════════════════════════════
+   DARK MODE — override ALL lf-* tokens
+════════════════════════════════════════ */
+.dark {
+  --lf-60:          #111827;
+  --lf-30:          #1F2937;
+  --lf-30-border:   #374151;
+  --lf-10:          #F59E0B;
+  --lf-10-bg:       rgba(245,158,11,0.16);
+  --lf-10-active:   #FCD34D;
+  --lf-text-primary:#F3F4F6;
+  --lf-text-muted:  #9CA3AF;
+  --lf-hover:       #2D3748;
+  --lf-orb-a:       rgba(245,158,11,0.04);
+  --lf-orb-b:       rgba(99,102,241,0.05);
+}
+
+/* ════════════
+   BODY / ROOT
+════════════ */
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--lf-60);
+  color: var(--lf-text-primary);
+}
+
+#root { min-height: 100vh; }
+
+/* ═══════════════
+   SCROLLBAR
+═══════════════ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: var(--lf-30); }
+::-webkit-scrollbar-thumb  { background: var(--lf-30-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--lf-hover); }
+
+/* ═══════════════
+   ACCESSIBILITY
+═══════════════ */
+.high-contrast { filter: contrast(1.5); }
+.high-contrast * { border-color: #000 !important; }
+.text-large  { font-size: 1.25rem !important; }
+.text-xlarge { font-size: 1.5rem !important; }
+
+/* ═══════════════════════════════════════════
+   LAYOUT BACKGROUNDS (60% / 30%)
+═══════════════════════════════════════════ */
+.lf-bg-base { background-color: var(--lf-60); }
+
+.lf-bg-main {
+  background-color: var(--lf-60);
+  background-image:
+    radial-gradient(ellipse 60% 40% at 85% 5%,  var(--lf-orb-a) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 35% at 10% 90%, var(--lf-orb-b) 0%, transparent 55%);
+}
+
+/* ── 30% — Sidebar ── */
+.lf-sidebar        { background-color: var(--lf-30); }
+.lf-sidebar-border { border-color: var(--lf-30-border); }
+
+/* ── 30% — Header ── */
+.lf-header        { background-color: var(--lf-30); }
+.lf-header-border { border-color: var(--lf-30-border); }
+
+/* ── 30% — Dropdown ── */
+.lf-dropdown        { background-color: var(--lf-60); }
+.lf-dropdown-border { border-color: var(--lf-30-border); }
+
+/* ═══════════════
+   TYPOGRAPHY
+═══════════════ */
+.lf-text-primary { color: var(--lf-text-primary); }
+.lf-text-muted   { color: var(--lf-text-muted); }
+
+/* ═════════════════════════════
+   HOVER BACKGROUND
+═════════════════════════════ */
+.hover\:lf-bg-hover:hover,
+.lf-bg-hover { background-color: var(--lf-hover); }
+
+/* ═════════════════════════════════════
+   10% ACCENT — Active nav item
+═════════════════════════════════════ */
+.lf-nav-active {
+  background-color: var(--lf-10-bg);
+  color: var(--lf-10-active);
+  font-weight: 700;
+  border-left: 3px solid var(--lf-10);
+  padding-left: calc(0.75rem - 3px);
+}
+.lf-nav-default { color: var(--lf-text-muted); }
+.lf-nav-default:hover {
+  background-color: var(--lf-hover);
+  color: var(--lf-text-primary);
+}
+
+/* ═══════════════════════════════════════
+   CARD / BG-WHITE SURFACES (30% token)
+═══════════════════════════════════════ */
+.bg-white {
+  background-color: var(--lf-60) !important;
+}
+.bg-white.rounded-xl {
+  background-color: var(--lf-30) !important;
+  border-color: var(--lf-30-border) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.07);
+}
+.bg-white.rounded-xl:hover {
+  border-color: var(--lf-10) !important;
+  border-color: color-mix(in srgb, var(--lf-10) 40%, var(--lf-30-border)) !important;
+}
+
+/* ═══════════════════════════════════════════
+   LEGACY THEME-* CLASSES (backwards compat)
+═══════════════════════════════════════════ */
+.theme-sidebar {
+  background: var(--lf-30) !important;
+  border-color: var(--lf-30-border) !important;
+}
+.theme-sidebar h1,
+.theme-sidebar p,
+.theme-sidebar a { color: var(--lf-text-primary) !important; }
+.theme-sidebar a:hover {
+  background-color: var(--lf-hover) !important;
+  color: var(--lf-text-primary) !important;
+}
+.theme-sidebar a[aria-current="page"] {
+  background-color: var(--lf-10-bg) !important;
+  color: var(--lf-10-active) !important;
+  box-shadow: none;
+}
+.theme-sidebar .border-gray-200 { border-color: var(--lf-30-border) !important; }
+
+.theme-header {
+  background: var(--lf-30) !important;
+  border-color: var(--lf-30-border) !important;
+}
+
+/* Focus visible */
+*:focus-visible {
+  outline: 2px solid var(--lf-10);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Smooth theme transitions */
+*,
+*::before,
+*::after {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.15s ease;
+}
+
+/* Toast */
+@keyframes slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+.animate-slide-in { animation: slide-in 0.3s ease-out; }

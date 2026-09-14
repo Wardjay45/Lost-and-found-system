@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lost &amp; Found - Data Flow Diagrams</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: "Segoe UI", sans-serif; }
+    h1 { margin: 0 0 6px; text-align: center; color: #1e40af; }
+    .subtitle { margin: 0 0 20px; text-align: center; color: #64748b; }
+    .tabs { display: flex; justify-content: center; gap: 8px; margin-bottom: 18px; }
+    button { padding: 10px 24px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #475569; cursor: pointer; font-weight: 600; }
+    button.active { border-color: #1e40af; background: #1e40af; color: white; }
+    .panel { display: none; padding: 18px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: white; text-align: center; }
+    .panel.active { display: block; }
+    img { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <h1>Lost &amp; Found Data Flow Diagrams</h1>
+  <p class="subtitle">Gane &amp; Sarson notation</p>
+  <div class="tabs">
+    <button class="active" data-panel="level0">DFD Level 0</button>
+    <button data-panel="level1">DFD Level 1</button>
+  </div>
+  <section id="level0" class="panel active"><img src="dfd-level0.svg" alt="Lost and Found DFD Level 0"></section>
+  <section id="level1" class="panel"><img src="dfd-level1.svg" alt="Lost and Found DFD Level 1"></section>
+  <script>
+    document.querySelectorAll('button[data-panel]').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('button[data-panel], .panel').forEach((element) => element.classList.remove('active'));
+        button.classList.add('active');
+        document.getElementById(button.dataset.panel).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

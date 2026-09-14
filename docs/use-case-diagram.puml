@@ -1,0 +1,69 @@
+@startuml Lost & Found System - Use Case Diagram
+
+top to bottom direction
+skinparam defaultFontSize 14
+
+actor "End User\n(Mobile)" as User
+actor "Admin\n(Web)" as Admin
+actor "AI System" as AI
+
+rectangle "Lost & Found System" {
+
+  usecase "Register / Login / Logout" as UC_Auth
+
+  usecase "Report Lost & Found Items\n(photo, description, QR)" as UC_Report
+
+  usecase "Search & Browse Items\n(lost, found, unclaimed)" as UC_Browse
+
+  usecase "Smart Matching\n(text, image, auto-match)" as UC_Match
+
+  usecase "Voice Input\n(Speech-to-Text)" as UC_Speech
+
+  usecase "Claims & Handover\n(claim, verify, pickup)" as UC_Claims
+
+  usecase "Messaging\n(send & view messages)" as UC_Msg
+
+  usecase "Profile & Notifications" as UC_Profile
+
+  usecase "Settings & Accessibility\n(app, TTS)" as UC_Settings
+
+  usecase "Submit Feedback" as UC_Fb
+
+  usecase "Dashboard & Analytics\n(stats, reports, logs)" as UC_Dash
+
+  usecase "Manage System\n(categories, users, roles, QR locations)" as UC_Admin
+
+}
+
+' === USER ==='
+User --> UC_Auth
+User --> UC_Report
+User --> UC_Browse
+User --> UC_Match
+User --> UC_Speech
+User --> UC_Claims
+User --> UC_Msg
+User --> UC_Profile
+User --> UC_Settings
+User --> UC_Fb
+
+' === ADMIN ==='
+Admin --> UC_Auth
+Admin --> UC_Browse
+Admin --> UC_Match
+Admin --> UC_Claims
+Admin --> UC_Msg
+Admin --> UC_Settings
+Admin --> UC_Fb
+Admin --> UC_Dash
+Admin --> UC_Admin
+
+' === AI ==='
+AI --> UC_Match
+AI --> UC_Speech
+
+' === RELATIONSHIPS ==='
+UC_Match ..> UC_Claims : <<extend>>
+UC_Report ..> UC_Match : <<include>>
+
+@enduml
