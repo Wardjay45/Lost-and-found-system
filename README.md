@@ -1,16 +1,53 @@
-# React + Vite
+# Lost & Found capstone
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The applications and services are in separate folders:
 
-Currently, two official plugins are available:
+| Folder | Purpose |
+| --- | --- |
+| `web/` | React and Vite admin dashboard |
+| `mobile/` | Expo and React Native mobile application |
+| `server/` | Express API shared by the apps |
+| `ai-server/` | Python service for image and text matching |
+| `docs/` | Project diagrams and documentation |
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+`supabase-schema.sql` contains the shared database schema. Each JavaScript app or service has its own `package.json` and lockfile; run its commands from that folder.
 
-## React Compiler
+## Web admin dashboard
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```powershell
+cd web
+npm install
+npm run dev
+```
 
-## Expanding the Oxlint configuration
+The dashboard runs on port 5173 and proxies `/api` requests to the Express server on port 3001. Run `npm run build` in `web/` to make a production build.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Mobile application
+
+```powershell
+cd mobile
+npm install
+npm start
+```
+
+Use `npm run android` for an Android development build. The app can detect the API URL from Expo during development; a server URL can also be set in the app's settings when running on a device.
+
+## API server
+
+```powershell
+cd server
+npm install
+npm run dev
+```
+
+The API reads its environment variables from `server/.env` and listens on port 3001 by default. Keep credentials in that ignored file.
+
+## AI service
+
+```powershell
+cd ai-server
+python -m pip install -r requirements.txt
+python -m uvicorn main:app --reload --port 8000
+```
+
+The Express API calls this service on port 8000 by default for matching features.

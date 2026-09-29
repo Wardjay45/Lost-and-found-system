@@ -1,7 +1,8 @@
 // Test image match with a real image file
 import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 
-const imagePath = 'e:/Lost and found-admin/Logo/Lost and found icon app.png';
+const imagePath = fileURLToPath(new URL('../web/public/logo.png', import.meta.url));
 const imageB64 = readFileSync(imagePath).toString('base64');
 
 const body = JSON.stringify({

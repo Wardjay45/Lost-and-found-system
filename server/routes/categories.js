@@ -58,6 +58,14 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { name, icon, color, description, keywords, auto_tagging } = req.body;
+    const { data: existing, error: existingError } = await supabase
+      .from('categories')
+      .select('id, name, icon')
+      .eq('id', req.params.id)
+      .single();
+    if (existingError) throw existingError;
+    if (!existing) return res.status(404).json({ error: 'Category not found' });
+
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (icon !== undefined) updates.icon = icon;
@@ -76,6 +84,21 @@ router.put('/:id', async (req, res) => {
 
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Category not found' });
+
+    // Keep the denormalized item snapshots in sync so icon edits appear
+    // everywhere immediately, including older reports.
+    if (icon !== undefined && icon !== existing.icon) {
+      const updatesForItems = [
+        supabase.from('lost_items').update({ category_icon: icon }).eq('category_id', existing.id),
+        supabase.from('found_items').update({ category_icon: icon }).eq('category_id', existing.id),
+        supabase.from('lost_items').update({ category_icon: icon }).eq('category_name', existing.name),
+        supabase.from('found_items').update({ category_icon: icon }).eq('category_name', existing.name),
+      ];
+      const itemUpdateResults = await Promise.all(updatesForItems);
+      const itemUpdateError = itemUpdateResults.find(result => result.error)?.error;
+      if (itemUpdateError) throw itemUpdateError;
+    }
+
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
