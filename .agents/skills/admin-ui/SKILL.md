@@ -1,6 +1,9 @@
 ---
 name: admin-ui
 description: Improve or review the Lost & Found React web admin with modern professional design, accessible interactions, responsive layouts, and functional checks. Use for admin pages, shared components, themes, forms, tables, charts, and navigation in web/; not for React Native screens or API-only work.
+metadata:
+  author: "Lost & Found Project"
+  version: "1.0.0"
 ---
 
 # Admin UI work

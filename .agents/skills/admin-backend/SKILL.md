@@ -1,6 +1,9 @@
 ---
 name: admin-backend
 description: Implement or review Lost & Found web admin APIs and shared Supabase workflows, including permissions, item status changes, matching, claim verification, messaging, and settings. Use for admin-facing service and data behavior in this repository; not for visual-only UI changes or mobile-only flows.
+metadata:
+  author: "Lost & Found Project"
+  version: "1.0.0"
 ---
 
 # Admin backend work
