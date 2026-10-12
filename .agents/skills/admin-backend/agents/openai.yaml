@@ -1,0 +1,3 @@
+interface:
+  display_name: "Admin Backend"
+  short_description: "Lost & Found admin APIs and shared data workflows"
