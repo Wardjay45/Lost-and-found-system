@@ -1,6 +1,9 @@
 ---
 name: mobile-backend
 description: Implement or review data and service behavior used by the Lost & Found mobile app, including Supabase access, Express API routes, authentication, and AI matching, with meaningful functional verification. Use for mobile-facing backend work in this repository; not for visual-only UI changes.
+metadata:
+  author: "Lost & Found Project"
+  version: "1.0.0"
 ---
 
 # Mobile backend work
