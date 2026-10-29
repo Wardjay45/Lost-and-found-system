@@ -2,12 +2,13 @@ import { Router } from 'express';
 import supabase from '../db.js';
 
 const router = Router();
+const publicColumns = 'id,name,email,student_id,phone,department,gender,role,status,avatar,items_reported,items_claimed,join_date,last_active';
 
 // GET /api/users
 router.get('/', async (req, res) => {
   try {
     const { search, status } = req.query;
-    let query = supabase.from('users').select('*').order('id');
+    let query = supabase.from('users').select(publicColumns).order('id');
 
     if (status && status !== 'all') {
       query = query.eq('status', status);
@@ -38,7 +39,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      .select(publicColumns)
       .eq('id', req.params.id)
       .single();
 
@@ -63,7 +64,7 @@ router.put('/:id/status', async (req, res) => {
       .from('users')
       .update({ status, last_active: new Date().toISOString() })
       .eq('id', req.params.id)
-      .select()
+      .select(publicColumns)
       .single();
 
     if (error) throw error;
@@ -89,7 +90,7 @@ router.put('/:id', async (req, res) => {
       .from('users')
       .update(updates)
       .eq('id', req.params.id)
-      .select()
+      .select(publicColumns)
       .single();
 
     if (error) throw error;

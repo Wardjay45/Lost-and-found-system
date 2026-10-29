@@ -1,56 +1,53 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Image, Alert, ActivityIndicator } from 'react-native';
+import { TextInput, TouchableOpacity } from '../components/SpeechControls';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Image, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRoute } from '@react-navigation/native';
 import SpeechInputModal, { MicButton } from '../components/SpeechInputModal';
-import { useAccessibility } from '../context/AccessibilityContext';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import { useAuth } from '../context/AuthContext';
 import supabase from '../config/supabase';
+import { validateReportFields, optionalLocationDetails, requireReportLocation } from '../services/reporting.mjs';
 import VoiceAssistant from '../components/VoiceAssistant';
+import FormIcon from '../components/FormIcon';
+import ReportLocationPicker, { useReportLocations } from '../components/ReportLocationPicker';
 
 export default function ReportLostScreen({ navigation }) {
+  const styles = useThemedStyles(baseStyles);
   const route = useRoute();
-  const { speak, accessibilityStyles, scaledFontSize } = useAccessibility();
-  const { user, token } = useAuth();
+  const { speak, highContrast, accessibilityStyles, scaledFontSize, themeColors } = useAccessibility();
+  const { user } = useAuth();
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
-  const [location, setLocation] = useState('');
-  const [name, setName] = useState(user?.name || '');
-  const [contact, setContact] = useState('');
+  const { location, setLocation, locations, locationsLoading, locationsError, refreshLocations, locationLocked } = useReportLocations(route.params?.location);
+  const [locationDetails, setLocationDetails] = useState('');
   const [image, setImage] = useState(null);
   const [showCategory, setShowCategory] = useState(false);
   const [categories, setCategories] = useState([]);
-
-  const locationLocked = !!route.params?.location;
 
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const { data, error } = await supabase.from('categories').select('*');
-        if (data && Array.isArray(data)) {
-          setCategories(data.filter(c => c.auto_tagging !== false));
-        }
+        if (error || !Array.isArray(data)) throw error || new Error('Categories unavailable');
+        const visibleCategories = data.filter(c => c.auto_tagging !== false);
+        if (visibleCategories.length === 0) throw new Error('No categories available');
+        setCategories(visibleCategories);
       } catch {
         setCategories([
-          { id: 1, name: 'Electronics', icon: '💻' },
-          { id: 2, name: 'Accessories', icon: '⌚' },
-          { id: 3, name: 'Keys', icon: '🔑' },
-          { id: 4, name: 'IDs & Cards', icon: '🪪' },
-          { id: 5, name: 'Clothing', icon: '👕' },
-          { id: 6, name: 'Bags', icon: '🎒' },
-          { id: 7, name: 'Books & Papers', icon: '📚' },
-          { id: 8, name: 'Miscellaneous', icon: '📦' },
+          { id: null, name: 'Electronics', icon: '💻' },
+          { id: null, name: 'Accessories', icon: '⌚' },
+          { id: null, name: 'Keys', icon: '🔑' },
+          { id: null, name: 'IDs & Cards', icon: '🪪' },
+          { id: null, name: 'Clothing', icon: '👕' },
+          { id: null, name: 'Bags', icon: '🎒' },
+          { id: null, name: 'Books & Papers', icon: '📚' },
+          { id: null, name: 'Miscellaneous', icon: '📦' },
         ]);
       }
     };
     fetchCategories();
   }, []);
-
-  useEffect(() => {
-    if (route.params?.location) {
-      setLocation(route.params.location);
-    }
-  }, [route.params?.location]);
 
   const [speechModal, setSpeechModal] = useState({ visible: false, field: '', fieldName: '' });
   const [activeMic, setActiveMic] = useState('');
@@ -63,11 +60,7 @@ export default function ReportLostScreen({ navigation }) {
   };
 
   const handleSpeechResult = (text) => {
-    if (speechModal.field === 'location' && locationLocked) {
-      setActiveMic('');
-      return;
-    }
-    const setters = { description: setDescription, name: setName, contact: setContact, location: setLocation };
+    const setters = { description: setDescription, locationDetails: value => setLocationDetails(value.slice(0, 500)) };
     if (setters[speechModal.field]) setters[speechModal.field](text);
     setActiveMic('');
   };
@@ -78,29 +71,25 @@ export default function ReportLostScreen({ navigation }) {
   };
 
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [formError, setFormError] = useState('');
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      base64: true,
-      quality: 0.7,
-      allowsEditing: true,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      if (asset.base64) {
-        const b64 = `data:image/jpeg;base64,${asset.base64}`;
-        console.log('Image from picker — base64 length:', asset.base64.length);
-        setImage(b64);
-      } else {
-        console.log('No base64 from picker, using URI fallback');
-        setImage(asset.uri);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        base64: true,
+        quality: 0.7,
+        allowsEditing: true,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const asset = result.assets[0];
+        setImage(asset.base64 ? 'data:image/jpeg;base64,' + asset.base64 : asset.uri);
       }
+    } catch (err) {
+      console.error('Image picker error:', err);
+      Alert.alert('Photo unavailable', 'Could not open your photo library. Check photo permission and try again.');
     }
   };
-
-  useEffect(() => {
-    if (user?.name && !name) setName(user.name);
-  }, [user?.name]);
 
   const generateItemId = () => {
     const prefix = 'LOST';
@@ -110,19 +99,27 @@ export default function ReportLostScreen({ navigation }) {
   };
 
   const handleSubmit = async () => {
-    if (!description || !category || !location || !name) {
-      speak('Please fill in all required fields.');
-      Alert.alert('Required', 'Please fill in all required fields');
+    if (submittingRef.current) return;
+    if (locationsLoading || locationsError) {
+      const message = 'Refresh the approved locations before submitting your report.';
+      setFormError(message);
+      speak(message);
       return;
     }
-    if (contact && contact.replace(/\D/g, '').length !== 11) {
-      Alert.alert('Invalid Phone', 'Phone number must be exactly 11 digits.');
+    const { error: validationError, cleanDescription, cleanCategory, cleanLocation, cleanName } =
+      validateReportFields({ description, category, location, name: user?.name, userId: user?.id });
+    if (validationError) {
+      setFormError(validationError);
+      speak(validationError);
       return;
     }
+    setFormError('');
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
-      const selectedCat = categories.find(c => c.name === category);
+      await requireReportLocation(supabase, cleanLocation);
+      const selectedCat = categories.find(c => c.name === cleanCategory);
 
       let imageBase64 = null;
       if (image) {
@@ -136,19 +133,20 @@ export default function ReportLostScreen({ navigation }) {
             });
             imageBase64 = `data:image/jpeg;base64,${b64raw}`;
           } catch (e) {
-            console.log('Fallback image read failed:', e?.message);
+            throw new Error('Could not read the selected photo. Remove it or choose another photo.');
           }
         }
       }
 
       const insertData = {
         item_id: generateItemId(),
-        description,
-        category_name: category,
+        description: cleanDescription,
+        category_name: cleanCategory,
         category_id: selectedCat?.id || null,
         category_icon: selectedCat?.icon || 'tag',
-        location_lost: location,
-        reporter_name: name,
+        location_lost: cleanLocation,
+        ...optionalLocationDetails(locationDetails),
+        reporter_name: cleanName,
         reporter_id: user?.id || null,
         status: 'active',
         date_reported: new Date().toISOString(),
@@ -183,47 +181,64 @@ export default function ReportLostScreen({ navigation }) {
       speak('Failed to submit report. Please try again.');
       Alert.alert('Error', err.message || 'Failed to submit report. Please try again.');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
   return (
     <SafeAreaView style={[styles.container, HC.container]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={styles.headerSection}>
-          <View style={styles.headerIcon}><Text style={{ fontSize: scaledFontSize(28) }}>🔍</Text></View>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
+        refreshControl={<RefreshControl refreshing={locationsLoading} onRefresh={refreshLocations} tintColor={themeColors.accent} colors={[themeColors.accent]} enabled={!submitting} />}>
+        <View style={[styles.headerSection, highContrast && HC.card]}>
+          <View style={styles.headerIcon}><FormIcon name="search" size={28} color={themeColors.accent} /></View>
           <Text style={[styles.title, HC.text, { fontSize: scaledFontSize(24) }]}>Report Lost Item</Text>
           <Text style={[styles.subtitle, HC.textMuted, { fontSize: scaledFontSize(14) }]}>Help us find your lost item</Text>
           <VoiceAssistant text="Report a lost item. Fill in the description, category, and location." />
           <View style={[styles.speechHint, HC.card]}>
-            <Text style={styles.speechHintIcon}>🎤</Text>
-            <Text style={[styles.speechHintText, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Tap the mic button next to any field to fill it by voice</Text>
+            <FormIcon name="mic" size={16} color={themeColors.accent} />
+            <Text style={[styles.speechHintText, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Choose an approved location. Use the mic for your description or additional details.</Text>
           </View>
         </View>
-        <TouchableOpacity style={[styles.imagePicker, HC.card, HC.touch]} onPress={pickImage} activeOpacity={0.7}>
+        <Text style={[styles.sectionHeading, HC.text, { fontSize: scaledFontSize(17) }]}>Item details</Text>
+        <Text style={[styles.sectionHint, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Fields marked * are required.</Text>
+        <TouchableOpacity style={[styles.imagePicker, HC.card, HC.touch]} onPress={pickImage} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={image ? "Change item photo" : "Add item photo"}>
           {image ? <Image source={{ uri: image }} style={styles.image} resizeMode="cover" /> : (
-            <View style={styles.imagePlaceholder}><Text style={styles.imageIcon}>📷</Text><Text style={[styles.imageText, HC.textMuted, { fontSize: scaledFontSize(14) }]}>Tap to add a photo</Text><Text style={[styles.imageSubtext, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Optional — helps with AI matching</Text></View>
+            <View style={styles.imagePlaceholder}><FormIcon name="camera" size={32} /><Text style={[styles.imageText, HC.textMuted, { fontSize: scaledFontSize(14) }]}>Tap to add a photo</Text><Text style={[styles.imageSubtext, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Optional — helps with AI matching</Text></View>
           )}
         </TouchableOpacity>
-        {image && <TouchableOpacity onPress={() => setImage(null)}><Text style={[styles.removeImage, { fontSize: scaledFontSize(13) }]}>✕ Remove photo</Text></TouchableOpacity>}
+        {image && <TouchableOpacity accessibilityLabel="Remove photo" accessibilityRole="button" style={[styles.removePhotoButton, HC.touch]} onPress={() => setImage(null)}><FormIcon name="x" size={16} /><Text style={[styles.removeImage, { fontSize: scaledFontSize(13) }]}>Remove photo</Text></TouchableOpacity>}
         <View style={styles.inputGroup}>
           <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Description *</Text>
-          <View style={styles.inputRow}><TextInput style={[styles.input, styles.inputFlex, { fontSize: scaledFontSize(15) }]} placeholder="Describe the item (color, brand, features...)" placeholderTextColor="#64748b" value={description} onChangeText={setDescription} multiline numberOfLines={3} textAlignVertical="top" /><MicButton onPress={() => openSpeech('description', 'Description')} active={activeMic === 'description'} /></View>
+          <View style={styles.inputRow}><TextInput style={[styles.input, styles.inputFlex, { fontSize: scaledFontSize(15) }]} accessibilityLabel="Item description, required" placeholder="Describe the item (color, brand, features...)" placeholderTextColor={themeColors.muted} value={description} onChangeText={setDescription} multiline numberOfLines={3} textAlignVertical="top" /><MicButton onPress={() => openSpeech('description', 'Description')} active={activeMic === 'description'} /></View>
           <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Category *</Text>
-          <TouchableOpacity style={[styles.select, HC.touch]} onPress={() => { setShowCategory(!showCategory); if (!showCategory) speak('Select category'); }} activeOpacity={0.7}><Text style={[category ? styles.selectText : styles.placeholderText, { fontSize: scaledFontSize(15) }, category && HC.text]}>{category || 'Select category'}</Text><Text style={[styles.arrow, showCategory && styles.arrowOpen]}>▼</Text></TouchableOpacity>
-          {showCategory && (<View style={styles.dropdown}>{categories.map(c => (<TouchableOpacity key={c.id} style={[styles.option, HC.touch]} onPress={() => { setCategory(c.name); setShowCategory(false); }}><Text style={[styles.optionText, HC.text, { fontSize: scaledFontSize(15) }]}>{c.name}</Text></TouchableOpacity>))}</View>)}
-          <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Location Lost * {locationLocked && '🔒'}</Text>
+          <TouchableOpacity accessibilityLabel={`Category, ${category || "not selected"}, required`} accessibilityState={{ expanded: showCategory }} style={[styles.select, HC.touch]} onPress={() => { setShowCategory(!showCategory); if (!showCategory) speak('Select category'); }} activeOpacity={0.7}><Text style={[category ? styles.selectText : styles.placeholderText, { fontSize: scaledFontSize(15) }, category && HC.text]}>{category || 'Select category'}</Text><FormIcon name={showCategory ? 'chevron-up' : 'chevron-down'} size={18} /></TouchableOpacity>
+          {showCategory && (<View style={styles.dropdown}>{categories.map(c => (<TouchableOpacity key={c.id ?? c.name} accessibilityRole="radio" accessibilityState={{ checked: category === c.name }} style={[styles.option, HC.touch]} onPress={() => { setCategory(c.name); setShowCategory(false); }}><Text style={[styles.optionText, HC.text, { fontSize: scaledFontSize(15) }]}>{c.name}</Text></TouchableOpacity>))}</View>)}
+          <Text style={[styles.sectionHeading, HC.text, { fontSize: scaledFontSize(17) }]}>Location</Text>
+          <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Location Lost *</Text>
+          <ReportLocationPicker value={location} locations={locations} loading={locationsLoading} error={locationsError}
+            onChange={setLocation} onRefresh={refreshLocations} locked={locationLocked} disabled={submitting} />
+          <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Additional Info (optional)</Text>
           <View style={styles.inputRow}>
-            <TextInput style={[styles.input, styles.inputFlex, locationLocked && { backgroundColor: 'rgba(15, 23, 42, 0.3)', borderColor: 'rgba(148, 163, 184, 0.06)' }, { fontSize: scaledFontSize(15) }]} placeholder="Where did you lose it?" placeholderTextColor="#64748b" value={location} onChangeText={locationLocked ? undefined : setLocation} editable={!locationLocked} />
-            {!locationLocked && <MicButton onPress={() => openSpeech('location', 'Location Lost')} active={activeMic === 'location'} />}
+          <TextInput
+            style={[styles.input, styles.inputFlex, { fontSize: scaledFontSize(15), minHeight: 90 }]}
+            placeholder="Where exactly did you lose it? Add a nearby landmark or other detail."
+            placeholderTextColor={themeColors.muted}
+            value={locationDetails}
+            onChangeText={setLocationDetails}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+            maxLength={500}
+            accessibilityLabel="Additional information about where you lost the item, optional"
+          />
+          <MicButton onPress={() => openSpeech('locationDetails', 'Additional Info')} active={activeMic === 'locationDetails'} />
           </View>
-          <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Your Name * {user?.name ? '🔒' : ''}</Text>
-          <TextInput style={[styles.input, user?.name && { backgroundColor: 'rgba(15, 23, 42, 0.3)', borderColor: 'rgba(148, 163, 184, 0.06)' }, { fontSize: scaledFontSize(15) }]} placeholder="Full name" placeholderTextColor="#64748b" value={name} onChangeText={setName} editable={!user?.name} />
-          <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Contact Info</Text>
-          <View style={styles.inputRow}><TextInput style={[styles.input, styles.inputFlex, { fontSize: scaledFontSize(15) }]} placeholder="09XX-XXX-XXXX (11 digits)" placeholderTextColor="#64748b" value={contact} onChangeText={(v) => setContact(v.replace(/\D/g, '').slice(0, 11))} keyboardType="phone-pad" maxLength={11} /><MicButton onPress={() => openSpeech('contact', 'Contact Info')} active={activeMic === 'contact'} /></View>
+          <Text style={[styles.sectionHint, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Track updates in My Reports and Messages.</Text>
         </View>
+        {!!formError && <View accessibilityRole="alert" style={styles.formErrorCard}><Text style={[styles.formErrorText, HC.text, { fontSize: scaledFontSize(13) }]}>{formError}</Text></View>}
         <TouchableOpacity style={[styles.submitBtn, submitting && { opacity: 0.6 }, HC.touch]} onPress={handleSubmit} activeOpacity={0.8} disabled={submitting}>
-          {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={[styles.submitText, { fontSize: scaledFontSize(16) }]}>Submit Report</Text>}
+          {submitting ? <View style={styles.submittingRow}><ActivityIndicator color="#fff" size="small" /><Text style={[styles.submitText, { fontSize: scaledFontSize(16) }]}>Submitting...</Text></View> : <Text style={[styles.submitText, { fontSize: scaledFontSize(16) }]}>Submit Report</Text>}
         </TouchableOpacity>
       </ScrollView>
       <SpeechInputModal visible={speechModal.visible} fieldName={speechModal.fieldName} onClose={closeSpeech} onResult={handleSpeechResult} />
@@ -231,24 +246,23 @@ export default function ReportLostScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
   scroll: { padding: 20, paddingBottom: 40 },
-  headerSection: { alignItems: 'center', marginBottom: 24, marginTop: 8 },
+  headerSection: { alignItems: 'flex-start', marginBottom: 20, marginTop: 8, padding: 20, borderRadius: 24, backgroundColor: 'rgba(79, 70, 229, 0.08)', borderWidth: 1, borderColor: 'rgba(79, 70, 229, 0.18)' },
   headerIcon: { width: 60, height: 60, borderRadius: 18, backgroundColor: 'rgba(79, 70, 229, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   title: { fontSize: 24, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3 },
   subtitle: { fontSize: 14, color: '#64748b', marginTop: 4 },
   speechHint: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(79,70,229,0.08)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 14, borderWidth: 1, borderColor: 'rgba(79,70,229,0.2)', gap: 8 },
-  speechHintIcon: { fontSize: 16 },
   speechHintText: { fontSize: 12, color: '#94a3b8', flex: 1, lineHeight: 18 },
   imagePicker: { backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 16, borderWidth: 1.5, borderColor: 'rgba(148, 163, 184, 0.15)', borderStyle: 'dashed', overflow: 'hidden', marginBottom: 8 },
   image: { width: '100%', height: 200, borderRadius: 16 },
   imagePlaceholder: { height: 140, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  imageIcon: { fontSize: 36 },
   imageText: { fontSize: 14, color: '#94a3b8', fontWeight: '600', marginTop: 8 },
   imageSubtext: { fontSize: 12, color: '#475569', marginTop: 2 },
-  removeImage: { color: '#ef4444', fontSize: 13, textAlign: 'center', marginBottom: 16, fontWeight: '600' },
-  inputGroup: { marginTop: 8 },
+  removePhotoButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, marginBottom: 16 },
+  removeImage: { color: '#ef4444', fontSize: 13, textAlign: 'center', fontWeight: '600' },
+  inputGroup: { marginTop: 8, padding: 18, borderRadius: 22, backgroundColor: 'rgba(30, 41, 59, 0.6)', borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.12)' },
   label: { fontSize: 13, fontWeight: '700', color: '#cbd5e1', marginBottom: 8, marginTop: 16, textTransform: 'uppercase', letterSpacing: 0.3 },
   inputRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   inputFlex: { flex: 1 },
@@ -256,11 +270,14 @@ const styles = StyleSheet.create({
   select: { backgroundColor: 'rgba(15, 23, 42, 0.6)', borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.12)', borderRadius: 14, padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   selectText: { fontSize: 15, color: '#f1f5f9' },
   placeholderText: { fontSize: 15, color: '#64748b' },
-  arrow: { fontSize: 10, color: '#64748b' },
-  arrowOpen: { transform: [{ rotate: '180deg' }] },
   dropdown: { backgroundColor: 'rgba(30, 41, 59, 0.9)', borderRadius: 14, marginTop: 4, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.08)' },
   option: { padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(148, 163, 184, 0.05)' },
   optionText: { fontSize: 15, color: '#e2e8f0' },
-  submitBtn: { backgroundColor: '#4f46e5', borderRadius: 16, padding: 18, alignItems: 'center', marginTop: 28, shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  submitBtn: { minHeight: 56, backgroundColor: '#4f46e5', borderRadius: 16, padding: 18, alignItems: 'center', marginTop: 28, shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   submitText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  submittingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionHeading: { color: '#f1f5f9', fontSize: 17, fontWeight: '700', marginTop: 18, marginBottom: 4 },
+  sectionHint: { color: '#94a3b8', fontSize: 12, lineHeight: 18, marginBottom: 8 },
+  formErrorCard: { padding: 14, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.12)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.45)', marginTop: 18 },
+  formErrorText: { color: '#fecaca', lineHeight: 19 },
 });

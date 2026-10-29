@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import supabase from '../db.js';
+import { readAll } from '../services/readAll.js';
 
 const router = Router();
 
@@ -84,31 +85,30 @@ router.get('/conversations', async (req, res) => {
   }
 });
 
-// GET /api/messages/:conversationId — get messages for a specific conversation
-router.get('/:conversationId', async (req, res) => {
+// GET /api/messages/count — returns incoming message count (for admin sidebar badge)
+router.get('/count', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from('messages')
-      .select('*')
-      .eq('conversation_id', req.params.conversationId)
-      .order('time');
+      .select('*', { count: 'exact', head: true })
+      .eq('sender', 'user');
 
     if (error) throw error;
-    res.json(data || []);
+    res.json({ count: count || 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/messages/count — returns total message count (for admin sidebar badge)
-router.get('/count', async (req, res) => {
+// GET /api/messages/:conversationId — get messages for a specific conversation
+router.get('/:conversationId', async (req, res) => {
   try {
-    const { count, error } = await supabase
+    const data = await readAll(supabase
       .from('messages')
-      .select('*', { count: 'exact', head: true });
-
-    if (error) throw error;
-    res.json({ count: count || 0 });
+      .select('*')
+      .eq('conversation_id', req.params.conversationId)
+      .order('time').order('id'));
+    res.json(data || []);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

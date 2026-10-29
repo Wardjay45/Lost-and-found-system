@@ -1,11 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
-import { useAccessibility } from '../context/AccessibilityContext';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import VoiceAssistant from '../components/VoiceAssistant';
 
 const activityData = [];
 
 export default function TimelineScreen() {
+  const styles = useThemedStyles(baseStyles);
   const { speak, accessibilityStyles, scaledFontSize } = useAccessibility();
   const HC = accessibilityStyles;
   const activityText = `Activity Timeline. ${activityData.length} events.`;
@@ -44,7 +45,7 @@ export default function TimelineScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
   headerSection: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3 },

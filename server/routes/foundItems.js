@@ -1,7 +1,10 @@
+import { backgroundTask } from '../services/backgroundTask.js';
+import { aiFetch } from '../services/aiClient.js';
 import { Router } from 'express';
 import multer from 'multer';
 import supabase from '../db.js';
-import { normalizeLocation } from '../location-normalizer.js';
+import { readAll } from '../services/readAll.js';
+import { requireReportLocation, parseLocationDetails } from '../services/reportLocations.js';
 
 const router = Router();
 
@@ -20,7 +23,7 @@ const generateEmbeddings = async (itemId, table, imageUrl, description) => {
     // Text embedding
     if (description) {
       try {
-        const r = await fetch(`${AI_URL}/embedding/text`, {
+        const r = await aiFetch(`${AI_URL}/embedding/text`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: description }),
@@ -56,7 +59,7 @@ const generateEmbeddings = async (itemId, table, imageUrl, description) => {
           imageBase64 = `data:image/jpeg;base64,${imageBase64}`;
         }
         if (imageBase64) {
-          const r = await fetch(`${AI_URL}/embedding/image-base64`, {
+          const r = await aiFetch(`${AI_URL}/embedding/image-base64`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: imageBase64 }),
@@ -132,9 +135,8 @@ router.get('/', async (req, res) => {
     if (status && status !== 'all') query = query.eq('status', status);
     if (category && category !== 'all') query = query.eq('category_name', category);
     const sortField = sort === 'status' ? 'status' : 'date_found';
-    query = query.order(sortField, { ascending: false });
-    const { data, error } = await query;
-    if (error) throw error;
+    query = query.order(sortField, { ascending: false }).order('id', { ascending: false });
+    const data = await readAll(query);
     let filtered = data;
     if (search) {
       const q = search.toLowerCase();
@@ -147,7 +149,7 @@ router.get('/', async (req, res) => {
     }
     res.json(filtered);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -163,7 +165,7 @@ router.get('/:id', async (req, res) => {
     if (!data) return res.status(404).json({ error: 'Found item not found' });
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -174,6 +176,8 @@ router.post('/upload', upload.single('image'), async (req, res) => {
     if (!description || !location_found) {
       return res.status(400).json({ error: 'Description and location are required' });
     }
+    const locationDetails = parseLocationDetails(req.body.location_details);
+    const approvedLocation = await requireReportLocation(supabase, location_found);
     let imageUrl = null;
     if (req.file) {
       imageUrl = await uploadBuffer('lost-items', req.file.buffer, req.file.mimetype);
@@ -189,18 +193,19 @@ router.post('/upload', upload.single('image'), async (req, res) => {
         item_id: itemId, description,
         category_name: category_name || 'Miscellaneous',
         category_icon: '📦',
-        location_found: normalizeLocation(location_found),
-        current_location: location_found,
+        location_found: approvedLocation,
+        location_details: locationDetails,
+        current_location: approvedLocation,
         finder_name, finder_id: finder_id || null,
         condition: condition || 'Good', image: imageUrl, status: 'pending',
       })
       .select().single();
     if (error) throw error;
-    generateEmbeddings(data.id, 'found_items', imageUrl, description).catch(() => {});
+    backgroundTask(generateEmbeddings(data.id, 'found_items', imageUrl, description));
     await logActivity('report', `Found item reported: ${itemId} — ${description}`, finder_name || 'Admin');
     res.status(201).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -211,6 +216,8 @@ router.post('/', async (req, res) => {
     if (!description || !location_found) {
       return res.status(400).json({ error: 'Description and location are required' });
     }
+    const locationDetails = parseLocationDetails(req.body.location_details);
+    const approvedLocation = await requireReportLocation(supabase, location_found);
     const imageUrl = await uploadBase64(image);
     const { count } = await supabase.from('found_items').select('*', { count: 'exact', head: true });
     const itemId = `FOUND-${String((count || 0) + 1).padStart(4, '0')}`;
@@ -220,18 +227,19 @@ router.post('/', async (req, res) => {
         item_id: itemId, description,
         category_id, category_name: category_name || 'Miscellaneous',
         category_icon: category_icon || '📦',
-        location_found: normalizeLocation(location_found),
-        current_location: location_found,
+        location_found: approvedLocation,
+        location_details: locationDetails,
+        current_location: approvedLocation,
         finder_name, finder_id,
         condition: condition || 'Good', image: imageUrl, status: 'pending',
       })
       .select().single();
     if (error) throw error;
-    generateEmbeddings(data.id, 'found_items', imageUrl, description).catch(() => {});
+    backgroundTask(generateEmbeddings(data.id, 'found_items', imageUrl, description));
     await logActivity('report', `Found item reported: ${itemId} — ${description}`, finder_name || 'Admin');
     res.status(201).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -261,7 +269,7 @@ router.put('/:id/status', async (req, res) => {
     await logActivity(action, logDetail);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -274,7 +282,8 @@ router.put('/:id', async (req, res) => {
     if (category_id !== undefined) updates.category_id = category_id;
     if (category_name !== undefined) updates.category_name = category_name;
     if (category_icon !== undefined) updates.category_icon = category_icon;
-    if (location_found !== undefined) updates.location_found = normalizeLocation(location_found);
+    if (location_found !== undefined) updates.location_found = await requireReportLocation(supabase, location_found);
+    if (req.body.location_details !== undefined) updates.location_details = parseLocationDetails(req.body.location_details);
     if (condition !== undefined) updates.condition = condition;
     if (image !== undefined) updates.image = image;
     if (status !== undefined) updates.status = status;
@@ -289,7 +298,7 @@ router.put('/:id', async (req, res) => {
     await logActivity('update', `Found item ${req.params.id} updated`);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -303,7 +312,7 @@ router.delete('/:id', async (req, res) => {
     if (error) throw error;
     res.json({ message: 'Found item deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

@@ -4,9 +4,13 @@ Provides embedding generation for images (CLIP ViT-B/32) and text (E5-base-v2).
 Runs on port 8000 alongside the Express.js server on port 3001.
 """
 import base64
+import os
+import hmac
+from pathlib import Path
 import io
 import traceback
 import numpy as np
+from matching_scores import IMAGE_MODEL, TEXT_MODEL, score_candidates
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +20,29 @@ from sentence_transformers import SentenceTransformer
 from transformers import CLIPProcessor, CLIPModel
 
 app = FastAPI(title="Lost & Found AI", version="1.2.0")
+
+@app.middleware("http")
+async def service_access(request, call_next):
+    if request.url.path == "/health":
+        return await call_next(request)
+    key = os.environ.get("AI_SERVICE_KEY", "")
+    if os.environ.get("VERCEL") and not key:
+        return JSONResponse(status_code=503, content={"detail": "AI service access is not configured"})
+    if key and not hmac.compare_digest(request.headers.get("authorization", ""), "Bearer " + key):
+        return JSONResponse(status_code=401, content={"detail": "AI service access required"})
+    return await call_next(request)
+
+model_root = Path(__file__).resolve().parent / "model-cache"
+def model_source(name, fallback):
+    bundled = model_root / name
+    if os.environ.get("VERCEL") and not bundled.is_dir():
+        raise RuntimeError("Bundled AI model is missing; redeploy the AI service")
+    return str(bundled) if bundled.is_dir() else fallback
+
+if os.environ.get("VERCEL"):
+    torch.set_num_threads(1)
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,7 +81,7 @@ def get_text_model():
     global text_model
     if text_model is None:
         print("Loading E5-base-v2 text model...")
-        text_model = SentenceTransformer("intfloat/e5-base-v2", device=get_device())
+        text_model = SentenceTransformer(model_source("text", TEXT_MODEL), device=get_device())
         print("E5-base-v2 loaded.")
     return text_model
 
@@ -65,8 +92,8 @@ def get_clip():
     if clip_model is None:
         print("Loading CLIP ViT-B/32 model...")
         dw = get_device()
-        clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(dw)
-        clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        clip_model = CLIPModel.from_pretrained(model_source("image", IMAGE_MODEL)).to(dw)
+        clip_processor = CLIPProcessor.from_pretrained(model_source("image", IMAGE_MODEL))
         clip_model.eval()
         print("CLIP ViT-B/32 loaded.")
     return clip_model, clip_processor
@@ -302,55 +329,10 @@ def combined_search(request: CombinedSearchRequest):
     if query_img_emb is None and query_txt_emb is None:
         raise HTTPException(status_code=400, detail="Provide either text or image_base64")
 
-    # Normalize weights if both embeddings are present, else single weight = 1.0
-    has_img = query_img_emb is not None
-    has_txt = query_txt_emb is not None
-    if has_img and has_txt:
-        total_w = img_weight + txt_weight
-        img_w = img_weight / total_w if total_w > 0 else 0.5
-        txt_w = txt_weight / total_w if total_w > 0 else 0.5
-    elif has_img:
-        img_w, txt_w = 1.0, 0.0
-    else:
-        img_w, txt_w = 0.0, 1.0
-
-    # Score each stored item (skip dimension mismatches gracefully)
-    results = []
-    for item in stored_items:
-        image_score = 0.0
-        text_score = 0.0
-        if has_img and item.image_embedding:
-            try:
-                s_img = np.array(item.image_embedding, dtype=np.float64)
-                if len(s_img) != len(query_img_emb):
-                    print(f"  [skip] item #{item.id}: image dim mismatch stored={len(s_img)} query={len(query_img_emb)}")
-                else:
-                    s_img = s_img / (np.linalg.norm(s_img) + 1e-8)
-                    image_score = float(np.dot(s_img, query_img_emb))
-            except Exception as e:
-                print(f"  [warn] item #{item.id} image scoring failed: {e}")
-        if has_txt and item.text_embedding:
-            try:
-                s_txt = np.array(item.text_embedding, dtype=np.float64)
-                if len(s_txt) != len(query_txt_emb):
-                    print(f"  [skip] item #{item.id}: text dim mismatch stored={len(s_txt)} query={len(query_txt_emb)}")
-                else:
-                    s_txt = s_txt / (np.linalg.norm(s_txt) + 1e-8)
-                    text_score = float(np.dot(s_txt, query_txt_emb))
-            except Exception as e:
-                print(f"  [warn] item #{item.id} text scoring failed: {e}")
-
-        combined_score = img_w * image_score + txt_w * text_score
-        results.append(CombinedMatchItem(
-            id=item.id,
-            score=combined_score,
-            image_score=image_score,
-            text_score=text_score,
-        ))
-
-    # Sort by score descending
-    results.sort(key=lambda x: x.score, reverse=True)
-    return {"matches": results[:top_k]}
+    results = score_candidates(query_img_emb, query_txt_emb,
+                               [item.model_dump() for item in stored_items],
+                               img_weight, txt_weight, top_k)
+    return {"matches": [CombinedMatchItem(**item) for item in results]}
 
 
 if __name__ == "__main__":

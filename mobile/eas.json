@@ -6,7 +6,11 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "327218043703-426e3sno9gcpb1co6ao1a8ce2s1rac90.apps.googleusercontent.com",
+        "EXPO_PUBLIC_API_URL": "http://192.168.2.11:3001/api"
+      }
     },
     "preview": {
       "distribution": "internal"

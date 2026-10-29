@@ -1,18 +1,8 @@
+import { TextInput, TouchableOpacity } from '../components/SpeechControls';
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  SafeAreaView,
-  ActivityIndicator,
-  RefreshControl,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { useAccessibility } from '../context/AccessibilityContext';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import supabase from '../config/supabase';
 
 const statusColors = {
@@ -40,8 +30,9 @@ function normalizeItem(item) {
 }
 
 export default function BrowseItemsScreen({ navigation }) {
+  const styles = useThemedStyles(baseStyles);
   const { token } = useAuth();
-  const { speak, accessibilityStyles, scaledFontSize } = useAccessibility();
+  const { speak, accessibilityStyles, scaledFontSize, readableColor, themeColors } = useAccessibility();
   const [search, setSearch] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -146,8 +137,9 @@ export default function BrowseItemsScreen({ navigation }) {
       <View style={styles.searchRow}>
         <TextInput
           style={[styles.searchInput, { fontSize: scaledFontSize(15) }]}
+          accessibilityLabel="Search unclaimed items"
           placeholder="Search by description, category, location..."
-          placeholderTextColor="#64748b"
+          placeholderTextColor={themeColors.muted}
           value={search}
           onChangeText={setSearch}
         />
@@ -185,6 +177,7 @@ export default function BrowseItemsScreen({ navigation }) {
                 key={item.id}
                 style={[styles.card, HC.card, HC.touch]}
                 activeOpacity={0.7}
+                accessibilityLabel={`View ${item.description}. Location: ${item.location}. Status: ${status.label}.`}
                 onPress={() => handleItemPress(item)}
                 onLongPress={() =>
                   speak(
@@ -192,7 +185,7 @@ export default function BrowseItemsScreen({ navigation }) {
                   )
                 }
               >
-                <View style={styles.cardTop}>
+                <View style={[styles.cardTop, accessibilityStyles.fontScale >= 1.2 && { flexDirection: 'column', alignItems: 'stretch', gap: 12 }]}>
                   {item.image ? (
                     <Image source={{ uri: item.image }} style={styles.itemImage} />
                   ) : (
@@ -201,7 +194,7 @@ export default function BrowseItemsScreen({ navigation }) {
                     </View>
                   )}
                   <View style={styles.cardInfo}>
-                    <Text style={[styles.cardTitle, HC.text, { fontSize: scaledFontSize(15) }]} numberOfLines={2}>
+                    <Text style={[styles.cardTitle, HC.text, { fontSize: scaledFontSize(15) }]}>
                       {item.description}
                     </Text>
                     <Text style={[styles.cardMeta, HC.textMuted, { fontSize: scaledFontSize(12) }]}>
@@ -211,17 +204,18 @@ export default function BrowseItemsScreen({ navigation }) {
                       {item.category}{item.itemId ? ` · ID: ${item.itemId}` : ''}
                     </Text>
                   </View>
-                  <View style={styles.cardRight}>
+                  <View style={[styles.cardRight, accessibilityStyles.fontScale >= 1.2 && { alignItems: 'flex-start' }]}>
                     <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-                      <View style={[styles.dot, { backgroundColor: status.text }]} />
+                      <View style={[styles.dot, { backgroundColor: readableColor(status.text) }]} />
                       <Text
-                        style={[styles.statusText, { color: status.text }, { fontSize: scaledFontSize(11) }]}
+                        style={[styles.statusText, { color: readableColor(status.text) }, { fontSize: scaledFontSize(11) }]}
                       >
                         {status.label}
                       </Text>
                     </View>
                     {item.status !== 'claimed' && item.status !== 'resolved' && (
                       <TouchableOpacity
+                        accessibilityLabel={`Claim ${item.description}`}
                         style={styles.claimBtn}
                         onPress={() => handleItemPress(item)}
                       >
@@ -240,7 +234,7 @@ export default function BrowseItemsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
   headerSection: { paddingHorizontal: 20, paddingTop: 16 },
   title: { fontSize: 24, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3 },

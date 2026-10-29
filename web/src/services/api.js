@@ -1,3 +1,5 @@
+import { notifyChange } from './liveNotifications.mjs';
+import { activityLogQuery } from '../../../shared/activityLogs.mjs';
 // Use relative path to leverage Vite proxy in dev, or fallback to env var
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -21,13 +23,23 @@ const request = async (endpoint, options = {}) => {
     throw new Error(error.error || `HTTP ${res.status}`);
   }
 
-  return res.json();
+  const data = await res.json();
+  if (options.method && options.method !== 'GET') {
+    const table = endpoint.startsWith('/lost-items') ? 'lost_items' : endpoint.startsWith('/found-items') ? 'found_items' : endpoint.startsWith('/messages') ? 'messages' : null;
+    if (table) notifyChange(table);
+  }
+  return data;
 };
 
 // Auth
 export const authApi = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   me: () => request('/auth/me'),
+};
+
+export const feedbackApi = {
+  getAll: () => request('/feedback'),
+  getSummary: () => request('/feedback/summary'),
 };
 
 // Categories
@@ -99,8 +111,7 @@ export const messagesApi = {
 // Activity Logs
 export const activityLogsApi = {
   getAll: (params = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/activity-logs${qs ? `?${qs}` : ''}`);
+    return request(`/activity-logs${activityLogQuery(params)}`);
   },
   create: (data) => request('/activity-logs', { method: 'POST', body: JSON.stringify(data) }),
 };

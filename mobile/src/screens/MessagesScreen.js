@@ -1,6 +1,9 @@
+import { TextInput, TouchableOpacity } from '../components/SpeechControls';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
-import { useAccessibility } from '../context/AccessibilityContext';
+import { View, Text, StyleSheet, FlatList, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
+import { useIsFocused } from '@react-navigation/native';
+import { useMessageBadge } from '../context/MessageBadgeContext';
 import { useAuth } from '../context/AuthContext';
 import supabase from '../config/supabase';
 import VoiceAssistant from '../components/VoiceAssistant';
@@ -11,65 +14,23 @@ const TAB_BAR_BOTTOM = 16;
 const TAB_BAR_TOTAL = TAB_BAR_HEIGHT + TAB_BAR_BOTTOM + 12; // extra 12 for padding
 
 export default function MessagesScreen() {
-  const { speak, accessibilityStyles, scaledFontSize } = useAccessibility();
+  const styles = useThemedStyles(baseStyles);
+  const { speak, accessibilityStyles, scaledFontSize, themeColors } = useAccessibility();
   const { user } = useAuth();
-  const [messages, setMessages] = useState([]);
+  const { messages, conversationId, loading, connected, refresh, markSeen, appActive } = useMessageBadge();
+  const focused = useIsFocused();
   const [messageText, setMessageText] = useState('');
-  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [conversationId, setConversationId] = useState(null);
-  const [connected, setConnected] = useState(false);
   const [inputHeight, setInputHeight] = useState(44);
   const flatListRef = useRef(null);
 
   const HC = accessibilityStyles;
   const userName = user?.name || 'Guest';
 
-  // Try to find existing conversation for this user
-  const loadConversation = async () => {
-    setLoading(true);
-    try {
-      const { data: convs, error } = await supabase.from('conversations').select('*');
-      if (error) throw error;
-      const userConv = (convs || []).find(c => c.name === userName);
-      setConnected(true);
-      if (userConv) {
-        setConversationId(userConv.id);
-        const { data: msgs } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('conversation_id', userConv.id)
-          .order('time', { ascending: true });
-        setMessages(msgs || []);
-      }
-    } catch (err) {
-      setConnected(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  useEffect(() => { if (focused && appActive) void refresh(); }, [focused, appActive, refresh]);
   useEffect(() => {
-    loadConversation();
-  }, []);
-
-  // Auto-refresh every 5 seconds when we have a conversation
-  useEffect(() => {
-    if (!conversationId) return;
-    const interval = setInterval(async () => {
-      try {
-        const { data: msgs } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('conversation_id', conversationId)
-          .order('time', { ascending: true });
-        if (msgs && Array.isArray(msgs)) {
-          setMessages(msgs);
-        }
-      } catch {}
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [conversationId]);
+    if (focused && appActive && !loading && connected) markSeen(messages);
+  }, [focused, appActive, loading, connected, messages, markSeen]);
 
   const scrollToEnd = () => {
     setTimeout(() => {
@@ -79,7 +40,7 @@ export default function MessagesScreen() {
 
   const handleSend = async () => {
     const trimmed = messageText.trim();
-    if (!trimmed) return;
+    if (!trimmed || sending) return;
 
     setSending(true);
     const textToSend = trimmed;
@@ -99,7 +60,7 @@ export default function MessagesScreen() {
 
         if (convErr) throw convErr;
         convId = newConv.id;
-        setConversationId(convId);
+
       }
 
       // Insert the message
@@ -114,15 +75,7 @@ export default function MessagesScreen() {
 
       if (msgErr) throw msgErr;
 
-      setConnected(true);
-
-      // Refresh messages
-      const { data: latest } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', convId)
-        .order('time', { ascending: true });
-      if (Array.isArray(latest)) setMessages(latest);
+      await refresh();
 
       speak(`Sent: ${textToSend}`);
     } catch (err) {
@@ -142,11 +95,7 @@ export default function MessagesScreen() {
     }
   };
 
-  // Deduplicate before rendering (in case of race conditions)
-  const uniqueMessages = messages.filter((msg, index, arr) => {
-    const key = `${msg.time || ''}_${msg.text || ''}_${msg.sender || ''}`;
-    return arr.findIndex(m => `${m.time || ''}_${m.text || ''}_${m.sender || ''}` === key) === index;
-  });
+  const uniqueMessages = [...new Map(messages.map(msg => [String(msg.id), msg])).values()];
 
   const renderMessage = ({ item: msg }) => {
     const isAdminMsg = msg.sender === 'admin';
@@ -189,7 +138,7 @@ export default function MessagesScreen() {
               </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={loadConversation} style={{ padding: 6 }}>
+          <TouchableOpacity accessibilityLabel="Refresh messages" onPress={refresh} style={{ padding: 6 }}>
             <Text style={{ fontSize: scaledFontSize(18) }}>🔄</Text>
           </TouchableOpacity>
         </View>
@@ -200,7 +149,7 @@ export default function MessagesScreen() {
         ref={flatListRef}
         data={uniqueMessages}
         renderItem={renderMessage}
-        keyExtractor={(_, i) => String(i)}
+        keyExtractor={msg => String(msg.id)}
         style={styles.messagesContainer}
         contentContainerStyle={messages.length === 0 ? styles.messagesContentEmpty : styles.messagesContent}
         showsVerticalScrollIndicator={false}
@@ -241,7 +190,7 @@ export default function MessagesScreen() {
             setInputHeight(Math.min(120, Math.max(44, h)));
           }}
           placeholder="Type your message..."
-          placeholderTextColor="#64748b"
+          placeholderTextColor={themeColors.muted}
           editable={!sending}
           multiline
           textAlignVertical="center"
@@ -265,7 +214,7 @@ export default function MessagesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
   safeTop: { backgroundColor: 'rgba(30, 41, 59, 0.8)' },
   center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },

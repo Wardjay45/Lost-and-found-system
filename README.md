@@ -51,3 +51,7 @@ python -m uvicorn main:app --reload --port 8000
 ```
 
 The Express API calls this service on port 8000 by default for matching features.
+
+## Hosting
+
+The root Vercel project builds the web admin and serves its Express API. The Python models deploy as a separate AI project. See [deployment setup](docs/deployment.md) for environment variables, mobile configuration and verification. Keep all real .env files and deployment credentials out of Git.

@@ -1,22 +1,26 @@
+import { lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import ToastContainer from './components/common/Toast';
+import { LoadingState } from './components/common/UI';
 import Login from './pages/Login';
 import DashboardLayout from './components/layout/DashboardLayout';
-import Dashboard from './pages/Dashboard';
-import LostItems from './pages/LostItems';
-import FoundItems from './pages/FoundItems';
-import SmartMatching from './pages/SmartMatching';
-import ActivityLogs from './pages/ActivityLogs';
-import Analytics from './pages/Analytics';
-import Categories from './pages/Categories';
-import Users from './pages/Users';
-import QRLocations from './pages/QRLocations';
-import Messaging from './pages/Messaging';
-import UnclaimedItems from './pages/UnclaimedItems';
-import Settings from './pages/Settings';
-import Feedback from './pages/Feedback';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const LostItems = lazy(() => import('./pages/LostItems'));
+const FoundItems = lazy(() => import('./pages/FoundItems'));
+const SmartMatching = lazy(() => import('./pages/SmartMatching'));
+const PotentialMatches = lazy(() => import('./pages/PotentialMatches'));
+const ClaimedItems = lazy(() => import('./pages/ClaimedItems'));
+const ActivityLogs = lazy(() => import('./pages/ActivityLogs'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Categories = lazy(() => import('./pages/Categories'));
+const Users = lazy(() => import('./pages/Users'));
+const QRLocations = lazy(() => import('./pages/QRLocations'));
+const Messaging = lazy(() => import('./pages/Messaging'));
+const UnclaimedItems = lazy(() => import('./pages/UnclaimedItems'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Feedback = lazy(() => import('./pages/Feedback'));
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -25,7 +29,8 @@ function ProtectedRoute({ children }) {
 }
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return <LoadingState label="Opening your workspace..." />;
 
   return (
     <Routes>
@@ -42,6 +47,8 @@ function AppRoutes() {
         <Route path="items/lost" element={<LostItems />} />
         <Route path="items/found" element={<FoundItems />} />
         <Route path="matching" element={<SmartMatching />} />
+        <Route path="items/potential-matches" element={<PotentialMatches />} />
+        <Route path="items/claimed" element={<ClaimedItems />} />
         <Route path="activity-logs" element={<ActivityLogs />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="categories" element={<Categories />} />

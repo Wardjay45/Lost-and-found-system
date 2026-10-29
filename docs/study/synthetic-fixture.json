@@ -1,0 +1,13 @@
+{
+  "dataset_id": "software-check-only-not-study-evidence",
+  "synthetic": true,
+  "candidates": [
+    {"id": "c-a", "image_embedding": [1, 0], "text_embedding": [1, 0]},
+    {"id": "c-b", "image_embedding": [0, 1], "text_embedding": [0, 1]}
+  ],
+  "queries": [
+    {"id": "q-a", "split": "test", "relevant_ids": ["c-a"], "tags": ["color", "shape"], "image_embedding": [1, 0], "text_embedding": [1, 0]},
+    {"id": "q-b", "split": "test", "relevant_ids": ["c-b"], "tags": ["texture", "lighting", "viewing-angle", "similar-item"], "image_embedding": [0, 1], "text_embedding": [0.8, 0.6]},
+    {"id": "q-unmatched", "split": "test", "relevant_ids": [], "tags": ["similar-item"], "image_embedding": [0, 1], "text_embedding": [0, 1]}
+  ]
+}

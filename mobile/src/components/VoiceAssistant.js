@@ -1,94 +1,62 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
-import { useAccessibility } from '../context/AccessibilityContext';
+import React, { useEffect, useRef } from 'react';
+import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
+import FormIcon from './FormIcon';
 
 export default function VoiceAssistant({ text, onSpeak, autoSpeak }) {
-  const { ttsEnabled, speak, stopSpeaking, voiceNav, fontSize } = useAccessibility();
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [pulseAnim] = useState(new Animated.Value(1));
-  const timerRef = useRef(null);
+  const styles = useThemedStyles(baseStyles);
+  const { ttsEnabled, speak, stopSpeaking, isSpeaking, speechText, reduceMotion } = useAccessibility();
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const requestedText = useRef(text);
+  const reading = isSpeaking && speechText === requestedText.current;
 
   useEffect(() => {
     if (autoSpeak && text && ttsEnabled) {
-      handleSpeak();
+      requestedText.current = text;
+      speak(text);
     }
-  }, [autoSpeak, text]);
+  }, [autoSpeak, text, ttsEnabled, speak]);
 
   useEffect(() => {
-    if (isSpeaking) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 0.7, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [isSpeaking]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+    if (!reading || reduceMotion) { pulseAnim.setValue(1); return; }
+    const pulse = Animated.loop(Animated.sequence([
+      Animated.timing(pulseAnim, { toValue: 0.7, duration: 600, useNativeDriver: true }),
+      Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+    ]));
+    pulse.start();
+    return () => { pulse.stop(); pulseAnim.setValue(1); };
+  }, [reading, reduceMotion, pulseAnim]);
 
   const handleSpeak = () => {
-    if (isSpeaking) {
-      stopSpeaking();
-      setIsSpeaking(false);
-      if (timerRef.current) clearTimeout(timerRef.current);
-    } else {
-      const textToSpeak = onSpeak ? onSpeak() : text;
-      if (textToSpeak) {
-        speak(textToSpeak);
-        setIsSpeaking(true);
-        if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setIsSpeaking(false), textToSpeak.length * 60 + 500);
-      }
-    }
+    if (reading) { stopSpeaking(); return; }
+    const message = onSpeak ? onSpeak() : text;
+    if (message) { requestedText.current = message; speak(message); }
   };
 
-  if (!ttsEnabled && !voiceNav) return null;
-
+  if (!ttsEnabled) return null;
   return (
-    <TouchableOpacity
-      style={[styles.button, isSpeaking && styles.speaking]}
-      onPress={handleSpeak}
-      activeOpacity={0.7}
-      accessibilityLabel={isSpeaking ? 'Stop speaking' : 'Read aloud'}
-      accessibilityRole="button"
-    >
+    <TouchableOpacity style={[styles.button, reading && styles.speaking]} onPress={handleSpeak} activeOpacity={0.7}
+      accessibilityLabel={reading ? 'Stop speaking' : 'Read aloud'} accessibilityRole="button">
       <Animated.View style={[styles.iconWrap, { transform: [{ scale: pulseAnim }] }]}>
-        <Text style={styles.icon}>{isSpeaking ? '🔊' : '🔈'}</Text>
+        <FormIcon name={reading ? 'volume-x' : 'volume-2'} size={18} />
       </Animated.View>
-      {voiceNav && <Text style={styles.label}>{isSpeaking ? 'Stop' : 'Listen'}</Text>}
     </TouchableOpacity>
   );
 }
 
-/**
- * Floating stop button shown when TTS is enabled.
- * Tap it anywhere to instantly stop speech.
- */
 export function TTSStopButton() {
+  const styles = useThemedStyles(baseStyles);
   const { ttsEnabled, stopSpeaking } = useAccessibility();
   if (!ttsEnabled) return null;
-
   return (
-    <TouchableOpacity
-      style={styles.stopButton}
-      onPress={stopSpeaking}
-      activeOpacity={0.8}
-      accessibilityLabel="Stop text to speech"
-      accessibilityRole="button"
-    >
-      <Text style={styles.stopIcon}>🔇</Text>
+    <TouchableOpacity style={styles.stopButton} onPress={stopSpeaking} activeOpacity={0.8}
+      accessibilityLabel="Stop text to speech" accessibilityRole="button">
+      <FormIcon name="volume-x" size={20} color="#ffffff" />
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -113,9 +81,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  icon: {
-    fontSize: 16,
-  },
   label: {
     fontSize: 12,
     color: '#818cf8',
@@ -137,8 +102,5 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     zIndex: 9999,
-  },
-  stopIcon: {
-    fontSize: 20,
   },
 });

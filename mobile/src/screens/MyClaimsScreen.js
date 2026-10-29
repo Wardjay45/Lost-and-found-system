@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView,
-  SafeAreaView, ActivityIndicator, Modal, Alert, Image,
-} from 'react-native';
-import { useAccessibility } from '../context/AccessibilityContext';
+import { TouchableOpacity, TextInput } from '../components/SpeechControls';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator, Modal, Alert, Image } from 'react-native';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import { useAuth } from '../context/AuthContext';
 import supabase from '../config/supabase';
+import { loadUserReports } from '../services/reporting.mjs';
 import VoiceAssistant from '../components/VoiceAssistant';
+import FormIcon from '../components/FormIcon';
+import { useRecoveryFeedback, RecoveryFeedbackPrompt, RecoveryFeedbackButton } from '../components/RecoveryFeedback';
 
 const statusColors = {
   pending:         { bg: 'rgba(245, 158, 11, 0.1)', text: '#f59e0b', label: 'Pending' },
@@ -26,13 +28,15 @@ const getMatchScoreColor = (score) => {
 
 const formatMatchPct = (score) => `${Math.round((score || 0) * 100)}%`;
 
-export default function MyClaimsScreen() {
+export default function MyClaimsScreen({ navigation }) {
+  const styles = useThemedStyles(baseStyles);
   const tabs = ['All', 'Lost', 'Found'];
   const [activeTab, setActiveTab] = useState('All');
-  const { speak, accessibilityStyles, scaledFontSize } = useAccessibility();
-  const { user, token } = useAuth();
+  const { speak, highContrast, accessibilityStyles, scaledFontSize, readableColor, themeColors } = useAccessibility();
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -41,6 +45,14 @@ export default function MyClaimsScreen() {
   const [detailItem, setDetailItem] = useState(null);
   const [matchData, setMatchData] = useState(null);
   const [loadingMatch, setLoadingMatch] = useState(false);
+  const { recoveries, prompt, error: feedbackError, refreshFeedback, dismissPrompt } = useRecoveryFeedback();
+
+  const recoveryFor = item => item?.type === 'lost' ? recoveries.find(record => String(record.lost_item_id) === String(item.id)) : null;
+  const openFeedback = recovery => {
+    setDetailModalVisible(false);
+    if (prompt?.id === recovery.id) dismissPrompt();
+    navigation.navigate('Feedback', { recoveryId: recovery.id });
+  };
 
   const HC = accessibilityStyles;
 
@@ -71,35 +83,34 @@ export default function MyClaimsScreen() {
 
   const loadItems = useCallback(async () => {
     setLoading(true);
+    if (!user?.id) {
+      setItems([]);
+      setLoadError('Sign in to view your reports.');
+      setLoading(false);
+      return;
+    }
     try {
-      const [{ data: lostData }, { data: foundData }] = await Promise.all([
-        supabase.from('lost_items').select('*'),
-        supabase.from('found_items').select('*'),
-      ]);
-
-      const uid = String(user?.id);
-
-      const myLost = (lostData || [])
-        .filter(item => String(item.reporter_id) === uid)
-        .map(item => ({ ...item, type: 'lost' }));
-
-      const myFound = (foundData || [])
-        .filter(item => String(item.finder_id) === uid)
-        .map(item => ({ ...item, type: 'found' }));
+      const { lost, found } = await loadUserReports(supabase, user.id);
+      const myLost = lost.map(item => ({ ...item, type: 'lost' }));
+      const myFound = found.map(item => ({ ...item, type: 'found' }));
 
       const merged = [...myLost, ...myFound].sort(
         (a, b) => new Date(b.date_reported || b.date_found || b.created_at) -
                  new Date(a.date_reported || a.date_found || a.created_at)
       );
       setItems(merged);
+      setLoadError('');
     } catch (err) {
       console.error('Failed to load reports:', err);
+      setLoadError('Could not load your reports. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
   }, [user?.id]);
 
-  useEffect(() => { loadItems(); }, [loadItems]);
+  useFocusEffect(useCallback(() => {
+    loadItems();
+  }, [loadItems]));
 
   const openCancelModal = (item) => {
     setCancelTarget(item);
@@ -150,7 +161,7 @@ export default function MyClaimsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, HC.container]}>
-      <View style={styles.headerSection}>
+      <View style={[styles.headerSection, highContrast && HC.card]}>
         <Text style={[styles.title, HC.text, { fontSize: scaledFontSize(24) }]}>My Reports</Text>
         <Text style={[styles.subtitle, HC.textMuted, { fontSize: scaledFontSize(14) }]}>
           Track your lost and found reports
@@ -171,20 +182,29 @@ export default function MyClaimsScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity style={[styles.tab, styles.refreshTab, HC.touch]} onPress={loadItems}>
-          <Text style={{ fontSize: scaledFontSize(14) }}>🔄</Text>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Refresh reports" style={[styles.tab, styles.refreshTab, HC.touch]} onPress={() => { loadItems(); refreshFeedback(); }}>
+          <FormIcon name="refresh-cw" size={18} color={themeColors.accent} />
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <RecoveryFeedbackPrompt recovery={prompt} onLater={dismissPrompt} onRate={() => openFeedback(prompt)} />
+        {!!feedbackError && <Text accessibilityRole="alert" style={[HC.textMuted, { fontSize: scaledFontSize(13), marginBottom: 12 }]}>{feedbackError}</Text>}
         {loading ? (
           <View style={styles.empty}>
             <ActivityIndicator color="#818cf8" size="large" />
             <Text style={[styles.emptyText, HC.textMuted, { fontSize: scaledFontSize(15), marginTop: 12 }]}>Loading reports...</Text>
           </View>
+        ) : loadError ? (
+          <View style={styles.empty}>
+            <Text style={[styles.emptyText, HC.textMuted, { fontSize: scaledFontSize(15) }]}>{loadError}</Text>
+            <TouchableOpacity accessibilityLabel="Refresh reports" onPress={() => { loadItems(); refreshFeedback(); }} style={[styles.retryButton, HC.touch]} accessibilityRole="button">
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         ) : filtered.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>📭</Text>
+            <FormIcon name="inbox" size={44} style={styles.emptyIcon} />
             <Text style={[styles.emptyText, HC.textMuted, { fontSize: scaledFontSize(16) }]}>
               {activeTab === 'All' ? 'No reports yet' : `No ${activeTab.toLowerCase()} reports`}
             </Text>
@@ -207,7 +227,7 @@ export default function MyClaimsScreen() {
               >
                 <View style={styles.cardTop}>
                   <View style={[styles.typeBadge, { backgroundColor: item.type === 'lost' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)' }]}>
-                    <Text style={{ fontSize: scaledFontSize(18) }}>{item.type === 'lost' ? '🔍' : '📦'}</Text>
+                    <FormIcon name={item.type === 'lost' ? 'search' : 'package'} size={18} color={themeColors.accent} />
                   </View>
                   <View style={styles.cardInfo}>
                     <Text style={[styles.cardTitle, HC.text, { fontSize: scaledFontSize(15) }]} numberOfLines={2}>
@@ -218,19 +238,20 @@ export default function MyClaimsScreen() {
                     </Text>
                     {item.category_name && (
                       <Text style={[styles.cardCategory, { fontSize: scaledFontSize(11) }]}>
-                        🏷️ {item.category_name}
+                        {item.category_name}
                       </Text>
                     )}
                     {item.cancel_reason && (
                       <Text style={[styles.cancelReason, { fontSize: scaledFontSize(11) }]}>
-                        ❌ Reason: {item.cancel_reason}
+                        Reason: {item.cancel_reason}
                       </Text>
                     )}
                   </View>
                   <View style={styles.cardRight}>
+                    <RecoveryFeedbackButton recovery={recoveryFor(item)} onPress={event => { event?.stopPropagation?.(); openFeedback(recoveryFor(item)); }} />
                     <View style={[styles.statusBadge, { backgroundColor: c.bg }]}>
-                      <View style={[styles.dot, { backgroundColor: c.text }]} />
-                      <Text style={[styles.statusText, { color: c.text, fontSize: scaledFontSize(12) }]}>
+                      <View style={[styles.dot, { backgroundColor: readableColor(c.text) }]} />
+                      <Text style={[styles.statusText, { color: readableColor(c.text), fontSize: scaledFontSize(12) }]}>
                         {c.label}
                       </Text>
                     </View>
@@ -253,7 +274,7 @@ export default function MyClaimsScreen() {
       {/* Cancel Reason Modal */}
       <Modal visible={cancelModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: HC.highContrast ? '#1a1a1a' : '#1e293b' }]}>
+          <View style={[styles.modalCard, HC.card]}>
             <Text style={[styles.modalTitle, HC.text, { fontSize: scaledFontSize(18) }]}>Cancel Report</Text>
             <Text style={[styles.modalSub, HC.textMuted, { fontSize: scaledFontSize(13) }]}>
               Please tell us why you're cancelling this report:
@@ -264,9 +285,9 @@ export default function MyClaimsScreen() {
               </Text>
             )}
             <TextInput
-              style={[styles.reasonInput, { fontSize: scaledFontSize(14), color: HC.highContrast ? '#fff' : '#f1f5f9' }]}
+              style={[styles.reasonInput, HC.input, { fontSize: scaledFontSize(14) }]}
               placeholder="e.g. I found my item, wrong report, duplicate..."
-              placeholderTextColor="#64748b"
+              placeholderTextColor={themeColors.muted}
               value={cancelReason}
               onChangeText={setCancelReason}
               multiline
@@ -278,7 +299,7 @@ export default function MyClaimsScreen() {
                 onPress={() => setCancelModalVisible(false)}
                 disabled={cancelling}
               >
-                <Text style={[styles.modalBtnText, { color: '#94a3b8', fontSize: scaledFontSize(14) }]}>Keep Report</Text>
+                <Text style={[styles.modalBtnText, HC.textMuted, { fontSize: scaledFontSize(14) }]}>Keep Report</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnDanger, cancelling && { opacity: 0.6 }]}
@@ -297,18 +318,18 @@ export default function MyClaimsScreen() {
       {/* Detail Modal */}
       <Modal visible={detailModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={[styles.detailCard, { backgroundColor: HC.highContrast ? '#1a1a1a' : '#1e293b' }]}>
+          <View style={[styles.detailCard, HC.card]}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
               {/* Header */}
               <View style={styles.detailHeader}>
                 <Text style={[styles.detailTitle, HC.text, { fontSize: scaledFontSize(20) }]}>
                   {detailItem?.type === 'lost' ? 'Lost Item Report' : 'Found Item Report'}
                 </Text>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close report details"
                   onPress={() => setDetailModalVisible(false)}
-                  style={styles.detailCloseBtn}
+                  style={[styles.detailCloseBtn, HC.touch]}
                 >
-                  <Text style={{ fontSize: scaledFontSize(22), color: '#94a3b8' }}>✕</Text>
+                  <FormIcon name="x" size={22} />
                 </TouchableOpacity>
               </View>
 
@@ -321,7 +342,7 @@ export default function MyClaimsScreen() {
                 />
               ) : (
                 <View style={[styles.detailImagePlaceholder, { backgroundColor: detailItem?.type === 'lost' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)' }]}>
-                  <Text style={{ fontSize: scaledFontSize(48) }}>{detailItem?.type === 'lost' ? '🔍' : '📦'}</Text>
+                  <FormIcon name={detailItem?.type === 'lost' ? 'search' : 'package'} size={40} color={themeColors.accent} />
                 </View>
               )}
 
@@ -334,8 +355,8 @@ export default function MyClaimsScreen() {
                       const dc = statusColors[detailItem.status] || statusColors.pending;
                       return (
                         <View style={[styles.statusBadge, { backgroundColor: dc.bg, alignSelf: 'flex-start' }]}>
-                          <View style={[styles.dot, { backgroundColor: dc.text }]} />
-                          <Text style={[styles.statusText, { color: dc.text, fontSize: scaledFontSize(12) }]}>{dc.label}</Text>
+                          <View style={[styles.dot, { backgroundColor: readableColor(dc.text) }]} />
+                          <Text style={[styles.statusText, { color: readableColor(dc.text), fontSize: scaledFontSize(12) }]}>{dc.label}</Text>
                         </View>
                       );
                     })()}
@@ -352,7 +373,7 @@ export default function MyClaimsScreen() {
                     <View style={styles.detailField}>
                       <Text style={[styles.detailLabel, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Category</Text>
                       <Text style={[styles.detailValue, HC.text, { fontSize: scaledFontSize(15) }]}>
-                        🏷️ {detailItem.category_name}
+                        {detailItem.category_name}
                       </Text>
                     </View>
                   )}
@@ -365,6 +386,15 @@ export default function MyClaimsScreen() {
                       {detailItem.location_lost || detailItem.location_found || 'Unknown'}
                     </Text>
                   </View>
+
+                  {detailItem.location_details && (
+                    <View style={styles.detailField}>
+                      <Text style={[styles.detailLabel, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Additional Info</Text>
+                      <Text style={[styles.detailValue, HC.text, { fontSize: scaledFontSize(15) }]}>
+                        {detailItem.location_details}
+                      </Text>
+                    </View>
+                  )}
 
                   {detailItem.type === 'found' && detailItem.current_location && (
                     <View style={styles.detailField}>
@@ -416,7 +446,7 @@ export default function MyClaimsScreen() {
                   {detailItem.cancel_reason && (
                     <View style={styles.detailField}>
                       <Text style={[styles.detailLabel, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Cancel Reason</Text>
-                      <Text style={[styles.detailValue, { color: '#ef4444', fontSize: scaledFontSize(14), fontStyle: 'italic' }]}>
+                      <Text style={[styles.detailValue, { color: readableColor('#ef4444'), fontSize: scaledFontSize(14), fontStyle: 'italic' }]}>
                         {detailItem.cancel_reason}
                       </Text>
                     </View>
@@ -433,14 +463,14 @@ export default function MyClaimsScreen() {
                   {detailItem.status === 'potential_match' && matchData && (
                     <View style={styles.matchSection}>
                       <View style={styles.matchHeader}>
-                        <Text style={styles.matchDivider}>━━━━━━━━━━━━━━━</Text>
-                        <Text style={[styles.matchTitle, { color: '#8b5cf6', fontSize: scaledFontSize(15) }]}>🔗 Potential Match</Text>
+                        <View style={styles.matchDivider} />
+                        <View style={styles.matchTitleRow}><FormIcon name="link" size={18} color={readableColor('#8b5cf6')} /><Text style={[styles.matchTitle, { color: readableColor('#8b5cf6'), fontSize: scaledFontSize(15) }]}>Potential Match</Text></View>
                       </View>
 
                       <View style={[styles.matchScoreCard]}>
                         <View style={styles.matchScoreRow}>
                           <Text style={[HC.textMuted, { fontSize: scaledFontSize(12) }]}>Combined</Text>
-                          <Text style={{ color: getMatchScoreColor(matchData.score), fontWeight: '800', fontSize: scaledFontSize(13) }}>
+                          <Text style={{ color: readableColor(getMatchScoreColor(matchData.score)), fontWeight: '800', fontSize: scaledFontSize(13) }}>
                             {formatMatchPct(matchData.score)}
                           </Text>
                         </View>
@@ -449,8 +479,8 @@ export default function MyClaimsScreen() {
                         </View>
 
                         <View style={styles.matchScoreRow}>
-                          <Text style={[HC.textMuted, { fontSize: scaledFontSize(12) }]}>🖼️ Image</Text>
-                          <Text style={{ color: getMatchScoreColor(matchData.image_score || 0), fontWeight: '800', fontSize: scaledFontSize(13) }}>
+                          <Text style={[HC.textMuted, { fontSize: scaledFontSize(12) }]}>Image</Text>
+                          <Text style={{ color: readableColor(getMatchScoreColor(matchData.image_score || 0)), fontWeight: '800', fontSize: scaledFontSize(13) }}>
                             {formatMatchPct(matchData.image_score)}
                           </Text>
                         </View>
@@ -459,8 +489,8 @@ export default function MyClaimsScreen() {
                         </View>
 
                         <View style={styles.matchScoreRow}>
-                          <Text style={[HC.textMuted, { fontSize: scaledFontSize(12) }]}>📝 Text</Text>
-                          <Text style={{ color: getMatchScoreColor(matchData.text_score || 0), fontWeight: '800', fontSize: scaledFontSize(13) }}>
+                          <Text style={[HC.textMuted, { fontSize: scaledFontSize(12) }]}>Text</Text>
+                          <Text style={{ color: readableColor(getMatchScoreColor(matchData.text_score || 0)), fontWeight: '800', fontSize: scaledFontSize(13) }}>
                             {formatMatchPct(matchData.text_score)}
                           </Text>
                         </View>
@@ -472,9 +502,9 @@ export default function MyClaimsScreen() {
                       {/* Matched other item */}
                       {matchData.lost_item && detailItem.type === 'found' && (
                         <View style={[styles.matchItemCard, { backgroundColor: 'rgba(239, 68, 68, 0.06)', borderColor: 'rgba(239, 68, 68, 0.15)' }]}>
-                          <Text style={{ fontSize: scaledFontSize(12), color: '#ef4444', fontWeight: '700', marginBottom: 4 }}>🔍 Matched Lost Item</Text>
+                          <Text style={{ fontSize: scaledFontSize(12), color: readableColor('#ef4444'), fontWeight: '700', marginBottom: 4 }}>Matched Lost Item</Text>
                           <Text style={[HC.text, { fontSize: scaledFontSize(14), fontWeight: '600' }]}>{matchData.lost_item.description}</Text>
-                          <Text style={[HC.textMuted, { fontSize: scaledFontSize(12), marginTop: 2 }]}>📍 {matchData.lost_item.location}</Text>
+                          <Text style={[HC.textMuted, { fontSize: scaledFontSize(12), marginTop: 2 }]}>{matchData.lost_item.location}</Text>
                           {matchData.lost_item.image && (
                             <Image source={{ uri: matchData.lost_item.image }} style={styles.matchItemImage} resizeMode="cover" />
                           )}
@@ -482,9 +512,9 @@ export default function MyClaimsScreen() {
                       )}
                       {matchData.found_item && detailItem.type === 'lost' && (
                         <View style={[styles.matchItemCard, { backgroundColor: 'rgba(16, 185, 129, 0.06)', borderColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                          <Text style={{ fontSize: scaledFontSize(12), color: '#10b981', fontWeight: '700', marginBottom: 4 }}>📦 Matched Found Item</Text>
+                          <Text style={{ fontSize: scaledFontSize(12), color: readableColor('#10b981'), fontWeight: '700', marginBottom: 4 }}>Matched Found Item</Text>
                           <Text style={[HC.text, { fontSize: scaledFontSize(14), fontWeight: '600' }]}>{matchData.found_item.description}</Text>
-                          <Text style={[HC.textMuted, { fontSize: scaledFontSize(12), marginTop: 2 }]}>📍 {matchData.found_item.location}</Text>
+                          <Text style={[HC.textMuted, { fontSize: scaledFontSize(12), marginTop: 2 }]}>{matchData.found_item.location}</Text>
                           {matchData.found_item.image && (
                             <Image source={{ uri: matchData.found_item.image }} style={styles.matchItemImage} resizeMode="cover" />
                           )}
@@ -496,6 +526,7 @@ export default function MyClaimsScreen() {
               )}
             </ScrollView>
             {/* Close button at bottom */}
+            <RecoveryFeedbackButton recovery={recoveryFor(detailItem)} onPress={() => openFeedback(recoveryFor(detailItem))} />
             <TouchableOpacity
               style={styles.detailBottomBtn}
               onPress={() => setDetailModalVisible(false)}
@@ -509,17 +540,19 @@ export default function MyClaimsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
+  retryButton: { backgroundColor: '#4f46e5', borderRadius: 12, minHeight: 48, paddingHorizontal: 24, justifyContent: 'center', marginTop: 16 },
+  retryText: { color: '#fff', fontWeight: '700', textAlign: 'center' },
   container: { flex: 1, backgroundColor: '#0f172a' },
-  headerSection: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  headerSection: { marginHorizontal: 20, marginTop: 12, padding: 20, borderRadius: 22, backgroundColor: 'rgba(79, 70, 229, 0.10)', borderWidth: 1, borderColor: 'rgba(129, 140, 248, 0.2)' },
   title: { fontSize: 24, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3 },
   subtitle: { fontSize: 14, color: '#64748b', marginTop: 4 },
   tabRow: { flexDirection: 'row', paddingHorizontal: 20, marginTop: 16, marginBottom: 8, gap: 8 },
-  tab: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(30, 41, 59, 0.6)' },
+  tab: { flexGrow: 1, alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, backgroundColor: 'rgba(30, 41, 59, 0.6)' },
   tabActive: { backgroundColor: '#4f46e5' },
   tabText: { fontSize: 14, fontWeight: '600', color: '#94a3b8' },
   tabTextActive: { color: '#fff' },
-  refreshTab: { paddingHorizontal: 12, backgroundColor: 'rgba(30, 41, 59, 0.3)' },
+  refreshTab: { flexGrow: 0, minWidth: 48, paddingHorizontal: 12, backgroundColor: 'rgba(30, 41, 59, 0.3)' },
   scroll: { padding: 20, paddingTop: 8, paddingBottom: 100 },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 48 },
@@ -554,7 +587,7 @@ const styles = StyleSheet.create({
   detailCard: { width: '100%', maxWidth: 420, maxHeight: '85%', borderRadius: 20, padding: 20 },
   detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   detailTitle: { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
-  detailCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(148,163,184,0.1)', justifyContent: 'center', alignItems: 'center' },
+  detailCloseBtn: { minWidth: 44, minHeight: 44, borderRadius: 18, backgroundColor: 'rgba(148,163,184,0.1)', justifyContent: 'center', alignItems: 'center' },
   detailImage: { width: '100%', height: 220, borderRadius: 14, marginBottom: 16, backgroundColor: 'rgba(30,41,59,0.5)' },
   detailImagePlaceholder: { width: '100%', height: 160, borderRadius: 14, marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
   detailFields: { gap: 14 },
@@ -565,7 +598,8 @@ const styles = StyleSheet.create({
   // Match section
   matchSection: { marginTop: 8 },
   matchHeader: { alignItems: 'center', marginBottom: 10 },
-  matchDivider: { color: 'rgba(139, 92, 246, 0.3)', fontSize: 12, marginBottom: 4 },
+  matchDivider: { backgroundColor: 'rgba(139, 92, 246, 0.3)', height: 1, alignSelf: 'stretch', marginBottom: 12 },
+  matchTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   matchTitle: { fontSize: 15, fontWeight: '700', color: '#8b5cf6' },
   matchScoreCard: {
     backgroundColor: 'rgba(139, 92, 246, 0.08)',

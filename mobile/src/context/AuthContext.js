@@ -1,6 +1,7 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useRef } from 'react';
 import supabase from '../config/supabase';
-import bcrypt from 'bcryptjs';
+import { initApiUrl } from '../config/api';
+import { requestGoogleAuth } from '../services/googleAuth.mjs';
 
 const AuthContext = createContext(null);
 
@@ -8,52 +9,16 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(false);
+  const signupInFlight = useRef(false);
 
   const login = async (email, password) => {
     setLoading(true);
     try {
-      const { data: userData, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .single();
-
-      if (error || !userData) {
-        return { error: 'Invalid email or password' };
-      }
-
-      if (userData.status === 'archived') {
-        return { error: 'Account is archived. Contact administrator.' };
-      }
-
-      if (userData.status === 'suspended') {
-        return { error: 'Account is suspended.' };
-      }
-
-      // Check password — support seeded "admin123" and bcrypt hashed passwords
-      const validPassword = password === 'admin123' || await bcrypt.compare(password, userData.password);
-      if (!validPassword) {
-        return { error: 'Invalid email or password' };
-      }
-
-      // Update last active
-      await supabase
-        .from('users')
-        .update({ last_active: new Date().toISOString() })
-        .eq('id', userData.id);
-
-      const userObj = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        role: userData.role,
-        student_id: userData.student_id,
-        department: userData.department,
-        avatar: userData.avatar,
-      };
-
-      setToken('supabase-direct');
-      setUser(userObj);
+      const result = await requestGoogleAuth(await initApiUrl(), 'login', { email: email.trim().toLowerCase(), password });
+      if (result.error) return result;
+      if (!result.token || !result.user) return { error: 'The server did not confirm this login.' };
+      setToken(result.token);
+      setUser(result.user);
       return { success: true };
     } catch (err) {
       console.error('Login error:', err);
@@ -63,61 +28,27 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const signup = async (name, email, password, studentId, phone, department) => {
+  const googleRequest = async (endpoint, fields) => {
+    if (signupInFlight.current) return { error: 'Account creation is already in progress.' };
+    signupInFlight.current = true;
     setLoading(true);
     try {
-      // Check if email already exists
-      const { data: existing } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .single();
-
-      if (existing) {
-        return { error: 'An account with this email already exists' };
+      const result = await requestGoogleAuth(await initApiUrl(), endpoint, fields);
+      if (result.token && result.user) {
+        setToken(result.token);
+        setUser(result.user);
       }
-
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      const { data: userData, error } = await supabase
-        .from('users')
-        .insert({
-          name,
-          email,
-          password: hashedPassword,
-          student_id: studentId,
-          phone: phone || '',
-          department: department || '',
-          role: 'student',
-          status: 'active',
-          join_date: new Date().toISOString(),
-          last_active: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const userObj = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        role: userData.role,
-        student_id: userData.student_id,
-        department: userData.department,
-        phone: userData.phone,
-      };
-
-      setToken('supabase-direct');
-      setUser(userObj);
-      return { success: true };
-    } catch (err) {
-      console.error('Signup error:', err);
-      return { error: 'Signup failed. Check your internet connection.' };
+      return result;
+    } catch {
+      return { error: 'Unable to connect to the school server. Please try again.' };
     } finally {
+      signupInFlight.current = false;
       setLoading(false);
     }
   };
+
+  const continueWithGoogle = idToken => googleRequest('google', { google_id_token: idToken });
+  const signup = fields => googleRequest('google/signup', fields);
 
   const updateProfile = async (updates) => {
     if (!user) return false;
@@ -144,7 +75,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, token, login, signup, logout, updateProfile,
+      user, token, login, signup, continueWithGoogle, logout, updateProfile,
       isAuthenticated: !!user,
       loading,
     }}>

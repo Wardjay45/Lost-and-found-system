@@ -1,60 +1,9 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import os from 'os';
+import { aiFetch } from './services/aiClient.js';
+import app from './app.js';
 import supabase from './db.js';
-
-import categoriesRouter from './routes/categories.js';
-import usersRouter from './routes/users.js';
-import lostItemsRouter from './routes/lostItems.js';
-import foundItemsRouter from './routes/foundItems.js';
-import authRouter from './routes/auth.js';
-import dashboardRouter from './routes/dashboard.js';
-import messagesRouter from './routes/messages.js';
-import activityLogsRouter from './routes/activityLogs.js';
-import qrLocationsRouter from './routes/qrLocations.js';
-import aiRouter from './routes/ai.js';
-import speechToTextRouter from './routes/deepgram.js';
-import settingsRouter from './routes/settings.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-dotenv.config({ path: join(__dirname, '.env') });
-
-const app = express();
+import os from 'os';
 const PORT = process.env.PORT || 3001;
 const AI_URL = process.env.AI_SERVER_URL || 'http://localhost:8000';
-
-app.use(cors({ origin: '*', credentials: true }));
-app.use(express.json({ limit: '10mb' }));
-
-// Routes
-app.use('/api/auth', authRouter);
-app.use('/api/categories', categoriesRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/lost-items', lostItemsRouter);
-app.use('/api/found-items', foundItemsRouter);
-app.use('/api/dashboard', dashboardRouter);
-app.use('/api/messages', messagesRouter);
-app.use('/api/activity-logs', activityLogsRouter);
-app.use('/api/qr-locations', qrLocationsRouter);
-app.use('/api/ai', aiRouter);
-app.use('/api/speech-to-text', speechToTextRouter);
-app.use('/api/settings', settingsRouter);
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Error handler
-app.use((err, req, res, _next) => {
-  console.error('Server Error:', err);
-  res.status(500).json({ error: 'Internal server error', message: err.message });
-});
 
 // ── Auto-Embedding Background Poller ────────────────────────────
 // Mobile app inserts directly into Supabase (bypasses Express routes),
@@ -66,7 +15,7 @@ const generateEmbeddingsForItem = async (item, table, imageUrl) => {
     const updates = {};
     if (item.description) {
       try {
-        const r = await fetch(`${AI_URL}/embedding/text`, {
+        const r = await aiFetch(`${AI_URL}/embedding/text`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: item.description }),
@@ -92,7 +41,7 @@ const generateEmbeddingsForItem = async (item, table, imageUrl) => {
           imageBase64 = `data:image/jpeg;base64,${imageBase64}`;
         }
         if (imageBase64) {
-          const r = await fetch(`${AI_URL}/embedding/image-base64`, {
+          const r = await aiFetch(`${AI_URL}/embedding/image-base64`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: imageBase64 }),

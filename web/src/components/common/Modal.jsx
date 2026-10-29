@@ -1,29 +1,38 @@
+import { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import AppIcon from './AppIcon';
+let openDialogs = 0;
+let previousOverflow = '';
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }) {
+  const id = useId();
+  const panel = useRef(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement;
+    if (openDialogs++ === 0) { previousOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
+    const focusables = () => [...(panel.current?.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') || [])].filter(el => el.getClientRects().length);
+    const timer = setTimeout(() => (focusables()[0] || panel.current)?.focus(), 0);
+    const handleKey = event => {
+      const dialogs = document.querySelectorAll('[data-dialog-panel]');
+      if (dialogs[dialogs.length - 1] !== panel.current) return;
+      if (event.key === 'Escape') { event.preventDefault(); close.current?.(); }
+      if (event.key === 'Tab') {
+        const elements = focusables(); const first = elements[0]; const last = elements[elements.length - 1];
+        if (!first) { event.preventDefault(); panel.current?.focus(); }
+        else if (event.shiftKey && (document.activeElement === first || !panel.current.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !panel.current.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => { clearTimeout(timer); document.removeEventListener('keydown', handleKey); if (--openDialogs === 0) document.body.style.overflow = previousOverflow; if (previousFocus?.isConnected) previousFocus.focus(); };
+  }, [isOpen]);
   if (!isOpen) return null;
-
-  const sizeClasses = {
-    sm: 'max-w-md',
-    md: 'max-w-lg',
-    lg: 'max-w-2xl',
-    xl: 'max-w-4xl',
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-        <div className="fixed inset-0 bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-80 transition-opacity" onClick={onClose} />
-        <div className={`relative inline-block bg-white dark:bg-gray-800 rounded-xl shadow-2xl dark:shadow-2xl dark:shadow-black/40 transform transition-all text-left w-full ${sizeClasses[size]} p-6`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
-            <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none" aria-label="Close">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div>{children}</div>
-        </div>
-      </div>
-    </div>
-  );
+  return createPortal(<div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose?.(); }}>
+    <section ref={panel} data-dialog-panel className={`dialog-panel dialog-${size}`} role="dialog" aria-modal="true" aria-labelledby={id} tabIndex={-1}>
+      <header className="dialog-header"><h2 id={id}>{title}</h2><button type="button" className="icon-button" aria-label="Close dialog" onClick={onClose}><AppIcon name="close" /></button></header>
+      <div className="dialog-body">{children}</div>
+    </section>
+  </div>, document.body);
 }
