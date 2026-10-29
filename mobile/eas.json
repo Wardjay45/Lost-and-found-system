@@ -13,12 +13,20 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lost-found-admin-eta.vercel.app/api",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "327218043703-426e3sno9gcpb1co6ao1a8ce2s1rac90.apps.googleusercontent.com"
+      }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lost-found-admin-eta.vercel.app/api",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "327218043703-426e3sno9gcpb1co6ao1a8ce2s1rac90.apps.googleusercontent.com"
       }
     }
   },
