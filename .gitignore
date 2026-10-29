@@ -34,3 +34,19 @@ __pycache__/
 
 # Expo / React Native caches
 .expo/
+
+# Deployment state, model caches and local build credentials
+.vercel/
+.venv/
+venv/
+model-cache/
+*.apk
+*.aab
+credentials.json
+
+.tooling/
+
+.expo-export-check/
+
+.vercel
+.env*

@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import { createActivityLogsRouter } from '../routes/activityLogs.js';
+
+test('activity API authenticates admins, reads full history and derives match-event identity from the current account', async t => {
+  let actor = { id: 7, name: 'Current Admin', role: 'superadmin', status: 'active' }, databaseError = false;
+  const logs = [{ id: 1, action: 'Item Claimed', details: 'Recorded return' }, { id: 2, action: 'cancel', details: 'Cancelled' }];
+  const items = { lost_items: { id: 11, item_id: 'LOST-11', status: 'potential_match', description: 'Blue bag' }, found_items: { id: 22, item_id: 'FOUND-22', status: 'potential_match', description: 'Bag' } };
+  const client = { from(table) {
+    if (table === 'users') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: actor, error: null }) }) }) };
+    if (table in items) return { select: columns => { if (table === 'found_items') assert.equal(columns.includes('reporter'), false, 'Found reports have finder fields'); return { eq: () => ({ maybeSingle: async () => ({ data: items[table], error: null }) }) }; } };
+    assert.equal(table, 'activity_logs');
+    const query = { order: () => query, range: async (start, end) => ({ data: logs.slice(start, end + 1), error: databaseError ? Error('database') : null }), limit: async count => ({ data: logs.slice(0, count), error: databaseError ? Error('database') : null }) };
+    return { select: () => query, insert: fields => ({ select: () => ({ single: async () => { if (databaseError) return { data: null, error: Error('database') }; const row = { id: logs.length + 1, ...fields }; logs.push(row); return { data: row, error: null }; } }) }) };
+  } };
+  const secret = 'isolated-log-test-secret';
+  const app = express(); app.use(express.json()); app.use('/', createActivityLogsRouter({ client, jwtSecret: secret }));
+  const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const token = jwt.sign({ id: 7, role: 'superadmin' }, secret);
+  const call = (path = '/', body, session = token) => fetch(`http://127.0.0.1:${server.address().port}${path}`, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session}` } : {}) }, body: body && JSON.stringify(body) });
+  assert.equal((await call('/', null, '')).status, 401);
+  assert.equal((await call('/', null, 'forged')).status, 401);
+  actor.status = 'suspended'; assert.equal((await call()).status, 403); actor.status = 'active';
+  const studentToken = jwt.sign({ id: 7, role: 'student' }, secret);
+  actor.role = 'student'; assert.equal((await call('/', null, studentToken)).status, 403); actor.role = 'superadmin';
+  assert.equal((await (await call('/?action=undefined')).json()).length, 2);
+  assert.equal((await (await call('/?action=claim')).json())[0].action, 'Item Claimed');
+  assert.equal((await call('/?limit=bad')).status, 400);
+  assert.equal((await call('/?limit=-1')).status, 400);
+  assert.equal((await (await call('/?limit=1')).json()).length, 1);
+  const fields = { action: 'match', user_name: 'Forged Name', role: 'student', details: JSON.stringify({ lost_item_id: 11, found_item_id: 22, score: .86, image_score: .85, text_score: .88 }) };
+  const savedResponse = await call('/', fields); assert.equal(savedResponse.status, 201);
+  const saved = await savedResponse.json();
+  assert.equal(saved.user_name, 'Current Admin'); assert.equal(saved.role, 'superadmin');
+  assert.equal(JSON.parse(saved.details).lost_item_id, 11); assert.match(JSON.parse(saved.details).text, /Blue bag/);
+  const count = logs.length;
+  assert.equal((await call('/', { action: 'claim', details: 'Invented handover' })).status, 400);
+  assert.equal((await call('/', { action: 'match', details: '{bad' })).status, 400);
+  assert.equal((await call('/', { action: 'match', manual_review: true, details: JSON.stringify({ lost_item_id: 11, found_item_id: 22 }) })).status, 400);
+  items.found_items.status = 'claimed'; assert.equal((await call('/', fields)).status, 409);
+  items.found_items.status = 'potential_match'; databaseError = true;
+  assert.equal((await call('/', fields)).status, 503); assert.equal((await call()).status, 503);
+  assert.equal(logs.length, count);
+});

@@ -1,14 +1,17 @@
+import { TextInput, TouchableOpacity } from '../components/SpeechControls';
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Image, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useAccessibility } from '../context/AccessibilityContext';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import { useAuth } from '../context/AuthContext';
-import supabase from '../config/supabase';
+import { initApiUrl } from '../config/api';
+import { searchMatches } from '../services/matching.mjs';
 import VoiceAssistant from '../components/VoiceAssistant';
 
 export default function AIMatchesScreen({ navigation }) {
-  const { speak, accessibilityStyles, scaledFontSize } = useAccessibility();
-  const { user, token } = useAuth();
+  const styles = useThemedStyles(baseStyles);
+  const { speak, accessibilityStyles, scaledFontSize, readableColor, themeColors } = useAccessibility();
+  const { token } = useAuth();
   const HC = accessibilityStyles;
   const [searchText, setSearchText] = useState('');
   const [searchImage, setSearchImage] = useState(null);
@@ -18,88 +21,44 @@ export default function AIMatchesScreen({ navigation }) {
   const [searchMode, setSearchMode] = useState('text'); // 'text', 'image', 'both'
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.8 });
-    if (!result.canceled) setSearchImage(result.assets[0].uri);
-  };
-
-  // Simple text similarity function
-  const textSimilarity = (text1, text2) => {
-    if (!text1 || !text2) return 0;
-    const words1 = text1.toLowerCase().split(/\s+/);
-    const words2 = text2.toLowerCase().split(/\s+/);
-    const set1 = new Set(words1);
-    const set2 = new Set(words2);
-    const intersection = [...set1].filter(w => set2.has(w)).length;
-    const union = new Set([...set1, ...set2]).size;
-    return union > 0 ? intersection / union : 0;
+    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.8, base64: true });
+    if (!result.canceled && result.assets[0].base64) setSearchImage(`data:${result.assets[0].mimeType || 'image/jpeg'};base64,${result.assets[0].base64}`);
   };
 
   const handleSearch = async () => {
-    if (!searchText && !searchImage) {
-      Alert.alert('Required', 'Enter a description to search');
+    if (loading) return;
+    if (!searchText.trim() && !searchImage) {
+      Alert.alert('Required', 'Enter a description or choose a photo to search');
       return;
     }
-    
-    setSearchMode('text');
     setLoading(true);
-    setSearched(true);
+    setResults([]);
+    setSearched(false);
     try {
-      // Fetch all found items from Supabase
-      const { data: foundItems, error } = await supabase
-        .from('found_items')
-        .select('*')
-        .in('status', ['active', 'pending']);
-
-      if (error) throw error;
-
-      if (!foundItems || foundItems.length === 0) {
-        setResults([]);
-        speak('No items found in the system.');
-        return;
-      }
-
-      // Calculate text similarity scores
-      const searchLower = (searchText || '').toLowerCase();
-      const scored = foundItems
-        .map(item => {
-          const descScore = textSimilarity(searchLower, item.description || '');
-          const catScore = textSimilarity(searchLower, item.category_name || '');
-          const locScore = textSimilarity(searchLower, item.location_found || '');
-          const score = Math.min(1, descScore * 0.6 + catScore * 0.25 + locScore * 0.15 + 0.05);
-          return {
-            ...item,
-            score: Math.round(score * 100) / 100,
-            text_score: Math.round(descScore * 100) / 100,
-            image_score: 0,
-            location: item.location_found,
-          };
-        })
-        .filter(item => item.score > 0.05)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 10);
-
+      const scored = await searchMatches({ apiUrl: await initApiUrl(), token, description: searchText, image: searchImage });
+      setSearchMode(searchImage ? (searchText.trim() ? 'both' : 'image') : 'text');
       setResults(scored);
-      speak(`Found ${scored.length} matching items.`);
+      setSearched(true);
+      speak(`Found ${scored.length} possible matching items.`);
     } catch (err) {
-      Alert.alert('Error', 'Search failed. Check your internet connection.');
-    } finally {
-      setLoading(false);
-    }
+      Alert.alert('Search unavailable', err.message || 'Check your connection and try again.');
+    } finally { setLoading(false); }
   };
 
   const getScoreColor = (score) => {
-    if (score >= 0.7) return '#10b981';
-    if (score >= 0.5) return '#f59e0b';
-    return '#ef4444';
+    if (score >= 0.7) return readableColor('#10b981');
+    if (score >= 0.5) return readableColor('#f59e0b');
+    return readableColor('#ef4444');
   };
 
   const formatScore = (score) => `${Math.round(score * 100)}%`;
 
   return (
     <SafeAreaView style={[styles.container, HC.container]}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.headerSection}>
         <Text style={[styles.title, HC.text, { fontSize: scaledFontSize(24) }]}>AI Smart Matching</Text>
-        <Text style={[styles.subtitle, HC.textMuted, { fontSize: scaledFontSize(14) }]}>Search with AI embeddings (ResNet + NLP)</Text>
+        <Text style={[styles.subtitle, HC.textMuted, { fontSize: scaledFontSize(14) }]}>Find possible matches using a description, photo, or both. Similarity scores do not confirm ownership.</Text>
         <VoiceAssistant text="AI Matching. Search for lost items using a description or photo." />
       </View>
 
@@ -107,21 +66,23 @@ export default function AIMatchesScreen({ navigation }) {
       <View style={[styles.searchCard, HC.card]}>
         <TextInput
           style={[styles.searchInput, HC.text, { fontSize: scaledFontSize(15) }]}
+          accessibilityLabel="Item description for matching"
           placeholder="Describe the item..."
-          placeholderTextColor="#4a5568"
+          placeholderTextColor={themeColors.muted}
           value={searchText}
           onChangeText={setSearchText}
           onSubmitEditing={handleSearch}
         />
         <View style={styles.searchActions}>
           <TouchableOpacity style={[styles.imageBtn, HC.touch]} onPress={pickImage} activeOpacity={0.7}>
-            <Text style={{ fontSize: scaledFontSize(14) }}>
+            <Text style={[HC.text, { fontSize: scaledFontSize(14) }]}>
               {searchImage ? '📷 Change' : '📷 Photo'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.searchBtn, loading && styles.searchBtnDisabled]}
             onPress={handleSearch}
+            accessibilityLabel={loading ? "Searching for possible matches" : "Search for possible matches"}
             disabled={loading}
             activeOpacity={0.7}
           >
@@ -134,15 +95,15 @@ export default function AIMatchesScreen({ navigation }) {
         </View>
         {searchImage && (
           <View style={styles.imagePreviewWrap}>
-            <Image source={{ uri: searchImage }} style={styles.imagePreview} />
+            <Image source={{ uri: searchImage }} style={styles.imagePreview} accessibilityLabel="Selected search photo" />
             <TouchableOpacity onPress={() => setSearchImage(null)} style={styles.removeImg}>
-              <Text style={{ color: '#ef4444', fontSize: 12 }}>✕ Remove</Text>
+              <Text style={{ color: readableColor('#ef4444'), fontSize: scaledFontSize(12) }}>✕ Remove</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
         {results.length === 0 && searched && !loading && (
           <View style={styles.empty}>
             <Text style={{ fontSize: scaledFontSize(36) }}>🧠</Text>
@@ -158,9 +119,9 @@ export default function AIMatchesScreen({ navigation }) {
           return (
             <View key={item.id || idx} style={[styles.card, HC.card]}>
               <View style={styles.cardTop}>
-                <View style={[styles.scoreBadge, { backgroundColor: getScoreColor(combinedScore) + '20' }]}>
+                <View style={[styles.scoreBadge, { backgroundColor: themeColors.input }]}>
                   <Text style={{ color: getScoreColor(combinedScore), fontWeight: '800', fontSize: scaledFontSize(16) }}>
-                    {formatScore(combinedScore)}
+                    {formatScore(combinedScore)} similarity
                   </Text>
                 </View>
                 <Text style={[styles.itemId, HC.textMuted, { fontSize: scaledFontSize(11) }]}>{item.item_id || ''}</Text>
@@ -175,6 +136,7 @@ export default function AIMatchesScreen({ navigation }) {
               {item.image && (
                 <Image
                   source={{ uri: item.image }}
+                  accessibilityLabel={`Possible matching item: ${item.description}`}
                   style={styles.resultImage}
                   resizeMode="cover"
                 />
@@ -226,7 +188,7 @@ export default function AIMatchesScreen({ navigation }) {
               <TouchableOpacity
                 style={[styles.claimBtn, HC.touch]}
                 onPress={() => {
-                  speak(`Match ${formatScore(combinedScore)} for ${item.description}. Image similarity ${formatScore(imageScore)}, text similarity ${formatScore(textScore)}.`);
+                  speak(`Similarity ${formatScore(combinedScore)} for ${item.description}. Image similarity ${formatScore(imageScore)}, text similarity ${formatScore(textScore)}.`);
                   Alert.alert(
                     'Match Details',
                     `${item.description}\n\nLocation: ${item.location}\nCategory: ${item.category_name}\n\nCombined: ${formatScore(combinedScore)}\nImage: ${formatScore(imageScore)}\nText: ${formatScore(textScore)}`
@@ -244,12 +206,12 @@ export default function AIMatchesScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  headerSection: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  headerSection: { paddingHorizontal: 0, paddingTop: 16, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3 },
   subtitle: { fontSize: 14, color: '#64748b', marginTop: 4 },
-  searchCard: { backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 16, padding: 16, marginHorizontal: 20, marginTop: 12, borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.06)' },
+  searchCard: { backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 16, padding: 16, marginHorizontal: 0, marginBottom: 16, marginTop: 12, borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.06)' },
   searchInput: { backgroundColor: 'rgba(15, 23, 42, 0.6)', borderRadius: 12, padding: 14, color: '#f1f5f9', borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.1)' },
   searchActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
   imageBtn: { flex: 1, backgroundColor: 'rgba(79, 70, 229, 0.15)', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(129, 140, 248, 0.2)' },
@@ -259,16 +221,16 @@ const styles = StyleSheet.create({
   imagePreviewWrap: { marginTop: 10, alignItems: 'center' },
   imagePreview: { width: 80, height: 80, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.1)' },
   removeImg: { marginTop: 4 },
-  scroll: { padding: 20, paddingBottom: 100 },
+  scroll: { padding: 16, paddingBottom: 100 },
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { fontSize: 14, color: '#64748b', marginTop: 8 },
   emptySub: { fontSize: 12, color: '#475569', marginTop: 4 },
   card: { backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 20, padding: 18, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.06)' },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  cardTop: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   scoreBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
   itemId: { fontSize: 11, color: '#475569' },
   itemDesc: { fontSize: 15, color: '#e2e8f0', fontWeight: '600', marginBottom: 8 },
-  itemMeta: { flexDirection: 'row', gap: 12, marginBottom: 8 },
+  itemMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 8 },
   itemLoc: { fontSize: 12, color: '#64748b' },
   itemCat: { fontSize: 12, color: '#64748b' },
   resultImage: { width: '100%', height: 160, borderRadius: 12, marginBottom: 10 },

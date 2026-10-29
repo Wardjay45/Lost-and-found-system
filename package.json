@@ -1,0 +1,12 @@
+{
+  "name": "lost-and-found-platform",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build": "npm --prefix web run build",
+    "test": "npm --prefix web test"
+  }
+}

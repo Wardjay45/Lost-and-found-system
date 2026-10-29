@@ -1,9 +1,4 @@
-import { getStatusColor } from '../../utils/formatters';
-
-export default function StatusBadge({ status }) {
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
-      {status}
-    </span>
-  );
+export default function StatusBadge({ status = 'pending' }) {
+  const key = String(status).toLowerCase().replace(/\s+/g, '_');
+  return <span className={`status-badge status-${key}`}><span aria-hidden="true" />{String(status).replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())}</span>;
 }

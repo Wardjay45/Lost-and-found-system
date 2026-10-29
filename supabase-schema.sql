@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
   student_id TEXT,
   phone TEXT,
   department TEXT,
+  gender TEXT CHECK (gender IN ('Female', 'Male', 'Non-binary', 'Prefer not to say')),
+  google_subject TEXT UNIQUE,
   role TEXT DEFAULT 'student',
   status TEXT DEFAULT 'active',
   avatar TEXT,
@@ -43,6 +45,7 @@ CREATE TABLE IF NOT EXISTS lost_items (
   category_name TEXT,
   category_icon TEXT,
   location_lost TEXT NOT NULL,
+  location_details TEXT,
   date_reported TIMESTAMP DEFAULT NOW(),
   last_updated TIMESTAMP DEFAULT NOW(),
   status TEXT DEFAULT 'pending',
@@ -66,6 +69,7 @@ CREATE TABLE IF NOT EXISTS found_items (
   category_name TEXT,
   category_icon TEXT,
   location_found TEXT NOT NULL,
+  location_details TEXT,
   current_location TEXT,
   date_found TIMESTAMP DEFAULT NOW(),
   last_updated TIMESTAMP DEFAULT NOW(),
@@ -81,6 +85,11 @@ CREATE TABLE IF NOT EXISTS found_items (
   resolved_date TIMESTAMP,
   cancel_reason TEXT
 );
+
+-- CREATE TABLE IF NOT EXISTS does not upgrade databases created before this field.
+ALTER TABLE public.lost_items ADD COLUMN IF NOT EXISTS location_details TEXT;
+ALTER TABLE public.found_items ADD COLUMN IF NOT EXISTS location_details TEXT;
+NOTIFY pgrst, 'reload schema';
 
 -- 5. MATCHES TABLE
 CREATE TABLE IF NOT EXISTS matches (
@@ -197,3 +206,20 @@ ON CONFLICT DO NOTHING;
 -- Only Lost & Found Office — admin web IS the office, user conversations are created dynamically
 INSERT INTO conversations (name, avatar) VALUES
 ('Lost & Found Office', 'L');
+
+-- Enable only the tables used by report/chat notification subscriptions.
+-- Idempotent: preserve all existing publication tables and RLS policies.
+DO $$
+DECLARE table_name text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime' AND puballtables) THEN
+    FOREACH table_name IN ARRAY ARRAY['lost_items', 'found_items', 'messages', 'conversations'] LOOP
+      IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = table_name) THEN
+        EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', table_name);
+      END IF;
+    END LOOP;
+  END IF;
+END $$;

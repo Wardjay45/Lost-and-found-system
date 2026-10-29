@@ -1,19 +1,23 @@
+import { TouchableOpacity } from '../components/SpeechControls';
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useAccessibility } from '../context/AccessibilityContext';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import supabase from '../config/supabase';
 import VoiceAssistant from '../components/VoiceAssistant';
 
 export default function ScanQRScreen({ navigation }) {
+  const styles = useThemedStyles(baseStyles);
   const { speak, ttsEnabled, accessibilityStyles, scaledFontSize } = useAccessibility();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const HC = accessibilityStyles;
 
   useEffect(() => {
-    if (ttsEnabled) setTimeout(() => speak('Point camera at a QR code to scan.'), 800);
-  }, [permission, ttsEnabled]);
+    if (!ttsEnabled) return;
+    const timer = setTimeout(() => speak('Point camera at a QR code to scan.'), 800);
+    return () => clearTimeout(timer);
+  }, [permission, ttsEnabled, speak]);
 
   const parseLocation = (rawData) => {
     // Handle deep link URLs like: lostandfound://report?location=AB%20Building&id=2
@@ -102,6 +106,6 @@ export default function ScanQRScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' }, center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0f172a' }, loadingText: { fontSize: 16, color: '#64748b' }, deniedIcon: { width: 80, height: 80, borderRadius: 20, backgroundColor: 'rgba(239, 68, 68, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }, deniedTitle: { fontSize: 20, fontWeight: '700', color: '#f1f5f9' }, deniedSub: { fontSize: 14, color: '#64748b', textAlign: 'center', marginTop: 8, lineHeight: 20 }, grantBtn: { marginTop: 24, backgroundColor: '#4f46e5', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 14, shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 }, camera: { flex: 1 }, overlay: { flex: 1 }, topSection: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 }, ttsIcon: { marginTop: 12, alignItems: 'center' }, instruction: { color: '#fff', fontSize: 16, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 }, scanFrameWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center' }, scanFrame: { width: 260, height: 260, justifyContent: 'center', alignItems: 'center' }, corner: { position: 'absolute', width: 30, height: 30, borderColor: '#4f46e5' }, cornerTL: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 8 }, cornerTR: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 8 }, cornerBL: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 8 }, cornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 8 }, bottomSection: { alignItems: 'center', paddingBottom: 60 }, rescanBtn: { marginTop: 20, backgroundColor: '#4f46e5', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 14, shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
 });

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "buildCommand": "python cache_models.py",
+  "functions": {
+    "main.py": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "includeFiles": "model-cache/**",
+      "excludeFiles": "{tests/**,__pycache__/**,evaluate.py}"
+    }
+  },
+  "regions": [
+    "sin1"
+  ]
+}

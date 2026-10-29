@@ -3,18 +3,21 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import supabase from '../db.js';
 
+export function createAuthRouter({ client = supabase, jwtSecret = () => process.env.JWT_SECRET } = {}) {
 const router = Router();
+const secretForRequest = () => typeof jwtSecret === 'function' ? jwtSecret() : jwtSecret;
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
+    if (!secretForRequest()) return res.status(503).json({ error: 'Server sessions are not configured.' });
     const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const { data: user, error } = await supabase
+    const { data: user, error } = await client
       .from('users')
       .select('*')
       .eq('email', email)
@@ -32,22 +35,21 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Account is suspended.' });
     }
 
-    // For seeded data with placeholder passwords, allow if password is "admin123"
-    // In production, use proper bcrypt compare
-    const validPassword = password === 'admin123' || await bcrypt.compare(password, user.password);
+    // Use the account's actual password; no universal development password.
+    const validPassword = await bcrypt.compare(password, user.password || '');
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     // Update last active
-    await supabase
+    await client
       .from('users')
       .update({ last_active: new Date().toISOString() })
       .eq('id', user.id);
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET || 'lost-and-found-secret-key-2026',
+      secretForRequest(),
       { expiresIn: '7d' }
     );
 
@@ -60,81 +62,14 @@ router.post('/login', async (req, res) => {
         role: user.role,
         student_id: user.student_id,
         department: user.department,
+        phone: user.phone,
+        gender: user.gender,
         avatar: user.avatar,
       },
     });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed', message: err.message });
-  }
-});
-
-// POST /api/auth/signup
-router.post('/signup', async (req, res) => {
-  try {
-    const { name, email, password, student_id, phone, department } = req.body;
-
-    if (!name || !email || !password || !student_id) {
-      return res.status(400).json({ error: 'Name, email, password, and student ID are required' });
-    }
-
-    if (department && department.length > 100) {
-      return res.status(400).json({ error: 'Department name is too long' });
-    }
-
-    // Check if email already exists
-    const { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single();
-
-    if (existing) {
-      return res.status(409).json({ error: 'An account with this email already exists' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const { data: user, error } = await supabase
-      .from('users')
-      .insert({
-        name,
-        email,
-        password: hashedPassword,
-        student_id,
-        phone: phone || '',
-        department: department || '',
-        role: 'student',
-        status: 'active',
-        join_date: new Date().toISOString(),
-        last_active: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET || 'lost-and-found-secret-key-2026',
-      { expiresIn: '7d' }
-    );
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        student_id: user.student_id,
-        department: user.department,
-        phone: user.phone,
-      },
-    });
-  } catch (err) {
-    console.error('Signup error:', err);
-    res.status(500).json({ error: 'Signup failed', message: err.message });
   }
 });
 
@@ -145,9 +80,9 @@ router.get('/me', async (req, res) => {
     if (!authHeader) return res.status(401).json({ error: 'No token provided' });
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'lost-and-found-secret-key-2026');
+    const decoded = jwt.verify(token, secretForRequest(), { algorithms: ['HS256'] });
 
-    const { data: user, error } = await supabase
+    const { data: user, error } = await client
       .from('users')
       .select('*')
       .eq('id', decoded.id)
@@ -170,4 +105,6 @@ router.get('/me', async (req, res) => {
   }
 });
 
-export default router;
+return router;
+}
+export default createAuthRouter();

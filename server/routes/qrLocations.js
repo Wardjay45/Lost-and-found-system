@@ -38,8 +38,9 @@ router.get('/:id', async (req, res) => {
 // POST /api/qr-locations
 router.post('/', async (req, res) => {
   try {
-    const { name, description, location, qr_code } = req.body;
-    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const { description, location, qr_code } = req.body;
+    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    if (!name || name.length > 100) return res.status(400).json({ error: 'Enter a location name of 1–100 characters.' });
 
     const { data, error } = await supabase
       .from('qr_locations')
@@ -58,8 +59,10 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { name, description, location, qr_code, is_active } = req.body;
+    if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.trim().length > 100)) return res.status(400).json({ error: 'Enter a location name of 1–100 characters.' });
+    if (is_active !== undefined && typeof is_active !== 'boolean') return res.status(400).json({ error: 'Location active status must be true or false.' });
     const updates = {};
-    if (name !== undefined) updates.name = name;
+    if (name !== undefined) updates.name = name.trim();
     if (description !== undefined) updates.description = description;
     if (location !== undefined) updates.location = location;
     if (qr_code !== undefined) updates.qr_code = qr_code;

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-
-const API_URL = '/api';
+import { useState, useEffect, useRef } from 'react';
+import request from '../../services/api';
+import { loadPotentialMatch } from '../../services/potentialMatch.mjs';
+import { showToast } from './Toast';
 
 /**
  * Face-to-Face Verification Form
@@ -18,35 +19,27 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
   const [notes, setNotes] = useState('');
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState('');
+  const [autoMatched, setAutoMatched] = useState(false);
+  const [matchError, setMatchError] = useState('');
+  const [lookupRevision, setLookupRevision] = useState(0);
+  const claimLock = useRef(false);
 
-  // Auto-detect the matched found item from activity logs
+  // Use the same explicit saved pair as the comparison above the release form.
   useEffect(() => {
-    const findMatchedItem = async () => {
-      try {
-        const res = await fetch(`${API_URL}/activity-logs?action=match`);
-        if (!res.ok) return;
-        const logs = await res.json();
-        // Search logs for a match containing this lost item
-        for (const log of logs) {
-          try {
-            const data = JSON.parse(log.details);
-            if (data.lost_item_id === lostItem.id && data.found_item_id) {
-              setFoundItemId(data.found_item_id);
-              setFoundItemName(data.found_item_name || '');
-              return;
-            }
-          } catch {}
-        }
-      } catch (e) {
-        console.error('Failed to find matched item:', e);
-      } finally {
-        setLoadingMatch(false);
-      }
-    };
-    if (lostItem?.id) findMatchedItem();
-  }, [lostItem?.id]);
+    const controller = new AbortController();
+    setFoundItemId(''); setFoundItemName(''); setAutoMatched(false); setLoadingMatch(true); setMatchError('');
+    loadPotentialMatch(lostItem.id, 'lost_items', request, { signal: controller.signal })
+      .then(match => {
+        if (controller.signal.aborted) return;
+        if (match?.found_item?.id) { setFoundItemId(String(match.found_item.id)); setFoundItemName(match.found_item.description || match.found_item.item_id || ''); setAutoMatched(true); }
+      })
+      .catch(error => { if (!controller.signal.aborted) setMatchError(error.message || 'Unable to load the saved match.'); })
+      .finally(() => { if (!controller.signal.aborted) setLoadingMatch(false); });
+    return () => controller.abort();
+  }, [lostItem.id, lookupRevision]);
 
   const handleClaim = async () => {
+    if (claimLock.current) return;
     if (!verifiedBy.trim()) {
       setError('Please enter the admin name');
       return;
@@ -64,11 +57,11 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
       return;
     }
     setError('');
+    claimLock.current = true;
     setClaiming(true);
     try {
-      const res = await fetch(`${API_URL}/lost-items/${lostItem.id}/claim`, {
+      const data = await request('/lost-items/' + lostItem.id + '/claim', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           found_item_id: foundItemId,
           verified_by: verifiedBy,
@@ -77,13 +70,13 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
           notes: `Q&A: ${knowledgeAnswers || 'N/A'}. ${notes}`,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Claim failed');
-      alert('✅ Item released! Claim verified and recorded.');
+      if (data?.success !== true) throw new Error('The server did not confirm this handover.');
+      showToast('Item released! Claim verified and recorded.', 'success');
       if (onComplete) onComplete();
     } catch (e) {
       setError(e.message);
     } finally {
+      claimLock.current = false;
       setClaiming(false);
     }
   };
@@ -98,7 +91,9 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
         <div className="bg-white dark:bg-gray-700 p-3 rounded-lg text-xs text-gray-500">
           🔍 Finding matched item...
         </div>
-      ) : foundItemId ? (
+      ) : matchError ? (
+        <div className="ui-alert ui-alert-error" role="alert">{matchError}<button type="button" className="ui-button ui-button-secondary" onClick={() => setLookupRevision(value => value + 1)}>Retry matched item</button></div>
+      ) : autoMatched ? (
         <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
           <p className="text-xs text-green-700 dark:text-green-400">
             🔗 Matched with Found Item: <strong>{foundItemName || `#${foundItemId}`}</strong>
@@ -112,6 +107,8 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
           <div className="mt-2">
             <label className="block text-xs font-medium text-gray-500 mb-1">Found Item ID *</label>
             <input
+              aria-label="Found Item ID"
+              min="1"
               type="number"
               value={foundItemId}
               onChange={(e) => setFoundItemId(e.target.value)}
@@ -125,6 +122,7 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
       <label className="flex items-center gap-3 p-3 bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 cursor-pointer">
         <input
           type="checkbox"
+          aria-label="School ID Verified"
           checked={idVerified}
           onChange={(e) => setIdVerified(e.target.checked)}
           className="w-5 h-5 rounded accent-indigo-600"
@@ -147,6 +145,7 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
           <li>What was inside (if wallet/bag)?</li>
         </ul>
         <textarea
+          aria-label="Student answers"
           value={knowledgeAnswers}
           onChange={(e) => setKnowledgeAnswers(e.target.value)}
           placeholder="Record student's answers here..."
@@ -156,6 +155,7 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
         <label className="flex items-center gap-2 mt-2">
           <input
             type="checkbox"
+            aria-label="Knowledge check passed"
             checked={knowledgePassed}
             onChange={(e) => setKnowledgePassed(e.target.checked)}
             className="w-4 h-4 rounded accent-indigo-600"
@@ -168,6 +168,7 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
         <label className="block text-xs font-medium text-gray-500 mb-1">Admin Name *</label>
         <input
           type="text"
+          aria-label="Admin Name"
           value={verifiedBy}
           onChange={(e) => setVerifiedBy(e.target.value)}
           placeholder="e.g. Admin User"
@@ -178,6 +179,7 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Notes (optional)</label>
         <textarea
+          aria-label="Notes (optional)"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Additional notes..."
@@ -194,16 +196,23 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
 
       <div className="flex gap-2">
         <button
+          type="button"
           onClick={handleClaim}
-          disabled={claiming || loadingMatch}
+          disabled={claiming || loadingMatch || !!matchError}
           className="flex-1 bg-green-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
         >
           {claiming ? 'Processing...' : loadingMatch ? 'Loading matched item...' : '✅ Approve & Release Item'}
         </button>
         {onCancel && (
           <button
-            onClick={() => onCancel(foundItemId)}
-            disabled={claiming}
+            type="button"
+            onClick={async () => {
+              if (claimLock.current) return;
+              claimLock.current = true; setClaiming(true);
+              try { await onCancel(foundItemId); } catch (error) { setError(error.message); }
+              finally { claimLock.current = false; setClaiming(false); }
+            }}
+            disabled={claiming || loadingMatch || !!matchError}
             className="flex-1 bg-red-500 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors"
           >
             ❌ Cancel Approval

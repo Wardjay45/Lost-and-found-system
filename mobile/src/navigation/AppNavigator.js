@@ -1,11 +1,12 @@
 import React, { useRef, useEffect } from 'react';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Text, View, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAccessibility } from '../context/AccessibilityContext';
 import { useMessageBadge } from '../context/MessageBadgeContext';
+import FormIcon from '../components/FormIcon';
 
 import LoginScreen from '../screens/LoginScreen';
 import SignUpScreen from '../screens/SignUpScreen';
@@ -29,38 +30,30 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function TabIcon({ label, focused, badgeCount }) {
-  const icons = { Home: '🏠', Scan: '📷', Claims: '📋', Messages: '💬' };
-  const isScan = label === 'Scan';
+  const { themeColors } = useAccessibility();
+  const icons = { Home: 'home', Claims: 'clipboard', Messages: 'message-square' };
   return (
-    <View style={[tabStyles.iconContainer, isScan && tabStyles.scanIconWrapper]}>
-      {isScan ? (
-        <View style={[tabStyles.scanCircle, focused && tabStyles.scanCircleActive]}>
-          <Text style={{ fontSize: 20 }}>{icons[label]}</Text>
-        </View>
-      ) : (
-        <>
-          <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>
-            {icons[label] || '📍'}
+    <View style={tabStyles.iconContainer}>
+      <FormIcon name={icons[label] || 'map-pin'} size={20} color={focused ? themeColors.accent : themeColors.muted} />
+      {typeof badgeCount === 'number' && badgeCount > 0 && (
+        <View style={tabStyles.badge}>
+          <Text style={tabStyles.badgeText}>
+            {badgeCount > 99 ? '99+' : badgeCount}
           </Text>
-          {typeof badgeCount === 'number' && badgeCount > 0 && (
-            <View style={tabStyles.badge}>
-              <Text style={tabStyles.badgeText}>
-                {badgeCount > 99 ? '99+' : badgeCount}
-              </Text>
-            </View>
-          )}
-        </>
+        </View>
       )}
     </View>
   );
 }
 
-function MainTabs({ navigation }) {
-  const { unreadCount, markSeen } = useMessageBadge();
+function MainTabs() {
+  const { unreadCount } = useMessageBadge();
+  const { themeColors, announceNavigation } = useAccessibility();
 
   return (
     <View style={{ flex: 1 }}>
       <Tab.Navigator
+        screenListeners={({ route }) => ({ tabPress: () => announceNavigation(screenNames[route.name] || route.name) })}
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarIcon: ({ focused }) => (
@@ -70,21 +63,21 @@ function MainTabs({ navigation }) {
               badgeCount={route.name === 'Messages' ? unreadCount : undefined}
             />
           ),
-          tabBarActiveTintColor: '#a5b4fc',
-          tabBarInactiveTintColor: '#64748b',
+          tabBarActiveTintColor: themeColors.accent,
+          tabBarInactiveTintColor: themeColors.muted,
           tabBarStyle: {
             position: 'absolute',
             bottom: 16,
             left: 18,
             right: 18,
-            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            backgroundColor: themeColors.tab,
             borderRadius: 28,
             height: 68,
             paddingTop: 6,
             paddingBottom: 8,
             borderTopWidth: 0,
             borderWidth: 1,
-            borderColor: 'rgba(129, 140, 248, 0.10)',
+            borderColor: themeColors.border,
             shadowColor: '#4f46e5',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.20,
@@ -103,16 +96,10 @@ function MainTabs({ navigation }) {
         })}
       >
         <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Scan" component={ScanQRScreen} options={{ tabBarLabel: 'Scan' }} />
         <Tab.Screen name="Claims" component={MyClaimsScreen} options={{ tabBarLabel: 'Claims' }} />
         <Tab.Screen
           name="Messages"
           component={MessagesScreen}
-          listeners={{
-            tabPress: () => {
-              markSeen();
-            },
-          }}
         />
       </Tab.Navigator>
     </View>
@@ -125,28 +112,6 @@ const tabStyles = StyleSheet.create({
     justifyContent: 'center',
     width: 48,
     height: 38,
-  },
-  scanIconWrapper: {
-    marginTop: -10,
-  },
-  scanCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#4f46e5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(15, 23, 42, 0.95)',
-    shadowColor: '#4f46e5',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.40,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  scanCircleActive: {
-    backgroundColor: '#6366f1',
-    shadowOpacity: 0.55,
   },
   badge: {
     position: 'absolute',
@@ -171,7 +136,6 @@ const tabStyles = StyleSheet.create({
 const screenNames = {
   Main: 'Home',
   Home: 'Home',
-  Scan: 'Scan QR Code',
   Claims: 'My Reports',
   Messages: 'Messages',
   Login: 'Sign In',
@@ -190,16 +154,21 @@ const screenNames = {
   ScanQR: 'Scan QR Code',
 };
 
-const stackScreenOptions = {
-  headerTintColor: '#a5b4fc',
-  headerStyle: { backgroundColor: '#0f172a' },
+const stackScreenOptions = (colors) => ({
+  headerTintColor: colors.accent,
+  headerStyle: { backgroundColor: colors.background },
   headerShadowVisible: false,
   headerTitleStyle: { fontWeight: '700', fontSize: 17, letterSpacing: 0.2 },
-};
+});
 
 export default function AppNavigator() {
   const { isAuthenticated } = useAuth();
-  const { announceNavigation, ttsEnabled } = useAccessibility();
+  const { announceNavigation, ttsEnabled, activeTheme, themeColors } = useAccessibility();
+  const baseNavTheme = activeTheme === 'light' ? DefaultTheme : DarkTheme;
+  const navigationTheme = {
+    ...baseNavTheme,
+    colors: { ...baseNavTheme.colors, primary: themeColors.accent, background: themeColors.background, card: themeColors.surface, text: themeColors.text, border: themeColors.border },
+  };
   const prevRouteRef = useRef(null);
 
   const getActiveRouteName = (state) => {
@@ -214,15 +183,14 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer
+      theme={navigationTheme}
       onStateChange={(state) => {
         if (!ttsEnabled) return;
         const currentRouteName = getActiveRouteName(state);
         if (currentRouteName && currentRouteName !== prevRouteRef.current) {
           prevRouteRef.current = currentRouteName;
           const friendlyName = screenNames[currentRouteName] || currentRouteName;
-          setTimeout(() => {
-            announceNavigation(friendlyName);
-          }, 400);
+          announceNavigation(friendlyName);
         }
       }}
     >
@@ -230,19 +198,18 @@ export default function AppNavigator() {
         {isAuthenticated ? (
           <>
             <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="SignUp" component={SignUpScreen} />
-            <Stack.Screen name="ReportLost" component={ReportLostScreen} options={{ headerShown: true, title: 'Report Lost', ...stackScreenOptions }} />
-            <Stack.Screen name="ReportFound" component={ReportFoundScreen} options={{ headerShown: true, title: 'Report Found', ...stackScreenOptions }} />
-            <Stack.Screen name="ScanQR" component={ScanQRScreen} options={{ headerShown: true, title: 'Scan QR', ...stackScreenOptions }} />
-            <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, title: 'Profile', ...stackScreenOptions }} />
-            <Stack.Screen name="AIMatches" component={AIMatchesScreen} options={{ headerShown: true, title: 'AI Matches', ...stackScreenOptions }} />
-            <Stack.Screen name="Verification" component={VerificationScreen} options={{ headerShown: true, title: 'Verify Ownership', ...stackScreenOptions }} />
-            <Stack.Screen name="Handover" component={HandoverScreen} options={{ headerShown: true, title: 'Pickup', ...stackScreenOptions }} />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: true, title: 'Settings', ...stackScreenOptions }} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: true, title: 'Notifications', ...stackScreenOptions }} />
-            <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ headerShown: true, title: 'Feedback', ...stackScreenOptions }} />
-            <Stack.Screen name="Timeline" component={TimelineScreen} options={{ headerShown: true, title: 'Activity', ...stackScreenOptions }} />
-            <Stack.Screen name="Accessibility" component={AccessibilityScreen} options={{ headerShown: true, title: 'Accessibility', ...stackScreenOptions }} />
+            <Stack.Screen name="ReportLost" component={ReportLostScreen} options={{ headerShown: true, title: 'Report Lost', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="ReportFound" component={ReportFoundScreen} options={{ headerShown: true, title: 'Report Found', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="ScanQR" component={ScanQRScreen} options={{ headerShown: true, title: 'Scan QR', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, title: 'Profile', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="AIMatches" component={AIMatchesScreen} options={{ headerShown: true, title: 'AI Matches', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="Verification" component={VerificationScreen} options={{ headerShown: true, title: 'Verify Ownership', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="Handover" component={HandoverScreen} options={{ headerShown: true, title: 'Pickup', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: true, title: 'Settings', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: true, title: 'Notifications', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ headerShown: true, title: 'Feedback', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="Timeline" component={TimelineScreen} options={{ headerShown: true, title: 'Activity', ...stackScreenOptions(themeColors) }} />
+            <Stack.Screen name="Accessibility" component={AccessibilityScreen} options={{ headerShown: true, title: 'Accessibility', ...stackScreenOptions(themeColors) }} />
           </>
         ) : (
           <>

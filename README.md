@@ -51,3 +51,15 @@ python -m uvicorn main:app --reload --port 8000
 ```
 
 The Express API calls this service on port 8000 by default for matching features.
+
+## Hosting
+
+The root Vercel project builds the web admin and serves its Express API. The Python models deploy as a separate AI project. See [deployment setup](docs/deployment.md) for environment variables, mobile configuration and verification. Keep all real .env files and deployment credentials out of Git.
+
+### Hosted services
+
+- Admin: https://lost-found-admin-eta.vercel.app
+- API health: https://lost-found-admin-eta.vercel.app/api/health
+- AI service: https://lost-found-ai-sable.vercel.app/health (inference requires the private server key)
+
+Mobile preview and production profiles use the hosted API. Existing installations with a saved server address can set https://lost-found-admin-eta.vercel.app/api in their connection settings.

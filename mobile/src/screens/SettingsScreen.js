@@ -1,19 +1,19 @@
+import { TouchableOpacity, Switch, TextInput } from '../components/SpeechControls';
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Switch, TextInput, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, Modal } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { useAccessibility } from '../context/AccessibilityContext';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import { getConfiguredServerUrl, saveServerUrl, resetServerUrl } from '../config/api';
 import VoiceAssistant from '../components/VoiceAssistant';
+import FormIcon from '../components/FormIcon';
 
 export default function SettingsScreen({ navigation }) {
-  const { speak, accessibilityStyles, scaledFontSize } = useAccessibility();
+  const styles = useThemedStyles(baseStyles);
+  const { speak, accessibilityStyles, scaledFontSize, themeMode, setThemeMode, highContrast, setHighContrast, fontSize, themeColors } = useAccessibility();
   const { user, logout } = useAuth();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [smsEnabled, setSmsEnabled] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
-  const [highContrast, setHighContrast] = useState(false);
-  const [fontSize, setFontSize] = useState('Medium');
   const HC = accessibilityStyles;
 
   // Server URL config
@@ -89,7 +89,7 @@ export default function SettingsScreen({ navigation }) {
               <Text style={[HC.textMuted, { fontSize: scaledFontSize(13), marginBottom: 6 }]}>
                 For real devices, paste your localtunnel URL here.
               </Text>
-              <Text style={[HC.textMuted, { fontSize: scaledFontSize(12), marginBottom: 16, color: '#818cf8' }]}>
+              <Text style={[HC.textAccent, { fontSize: scaledFontSize(12), marginBottom: 16 }]}>
                 Example: https://something.loca.lt/api
               </Text>
               <TextInput
@@ -97,7 +97,7 @@ export default function SettingsScreen({ navigation }) {
                 value={serverUrl}
                 onChangeText={setServerUrl}
                 placeholder="https://your-tunnel.loca.lt/api"
-                placeholderTextColor="#475569"
+                placeholderTextColor={themeColors.muted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
@@ -121,20 +121,20 @@ export default function SettingsScreen({ navigation }) {
 
         <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(13) }]}>Notifications</Text>
         <View style={[styles.card, HC.card]}>
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>🔔 Push Notifications</Text><Switch value={pushEnabled} onValueChange={(v) => { setPushEnabled(v); speak(v ? 'Push notifications enabled' : 'Push notifications disabled'); }} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={pushEnabled ? '#4f46e5' : '#475569'} /></View>
+          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>🔔 Push Notifications</Text><Switch accessibilityLabel="Push notifications" value={pushEnabled} onValueChange={(v) => { setPushEnabled(v); speak(v ? 'Push notifications enabled' : 'Push notifications disabled'); }} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={pushEnabled ? '#4f46e5' : '#475569'} /></View>
           <View style={[styles.divider, HC.border]} />
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>📧 Email Notifications</Text><Switch value={emailEnabled} onValueChange={setEmailEnabled} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={emailEnabled ? '#4f46e5' : '#475569'} /></View>
+          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>📧 Email Notifications</Text><Switch accessibilityLabel="Email notifications" value={emailEnabled} onValueChange={setEmailEnabled} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={emailEnabled ? '#4f46e5' : '#475569'} /></View>
           <View style={[styles.divider, HC.border]} />
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>📱 SMS Notifications</Text><Switch value={smsEnabled} onValueChange={setSmsEnabled} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={smsEnabled ? '#4f46e5' : '#475569'} /></View>
+          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>📱 SMS Notifications</Text><Switch accessibilityLabel="SMS notifications" value={smsEnabled} onValueChange={setSmsEnabled} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={smsEnabled ? '#4f46e5' : '#475569'} /></View>
         </View>
 
         <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(13) }]}>Appearance</Text>
         <View style={[styles.card, HC.card]}>
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>🌙 Dark Mode</Text><Switch value={darkMode} onValueChange={(v) => { setDarkMode(v); speak(v ? 'Dark mode enabled' : 'Dark mode disabled'); }} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={darkMode ? '#4f46e5' : '#475569'} /></View>
+          <View style={styles.row}><FormIcon name="moon" style={styles.appearanceIcon} /><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>Dark Mode</Text><Switch accessibilityLabel="Dark mode" value={themeMode === 'dark'} onValueChange={(v) => { setThemeMode(v ? 'dark' : 'light'); speak(v ? 'Dark mode enabled' : 'Light mode enabled'); }} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={themeMode === 'dark' ? '#4f46e5' : '#475569'} /></View>
           <View style={[styles.divider, HC.border]} />
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>👁 High Contrast</Text><Switch value={highContrast} onValueChange={setHighContrast} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={highContrast ? '#4f46e5' : '#475569'} /></View>
+          <View style={styles.row}><FormIcon name="eye" style={styles.appearanceIcon} /><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>High Contrast</Text><Switch accessibilityLabel="High contrast" value={highContrast} onValueChange={setHighContrast} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={highContrast ? '#4f46e5' : '#475569'} /></View>
           <View style={[styles.divider, HC.border]} />
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>🔤 Font Size</Text><Text style={[styles.rowValue, HC.textMuted, { fontSize: scaledFontSize(14) }]}>{fontSize} ›</Text></View>
+          <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('Accessibility')} accessibilityRole="button"><FormIcon name="type" style={styles.appearanceIcon} /><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>Font Size</Text><Text style={[styles.rowValue, HC.textMuted, { fontSize: scaledFontSize(14) }]}>{fontSize} ›</Text></TouchableOpacity>
         </View>
 
         <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(13) }]}>Accessibility</Text>
@@ -142,18 +142,6 @@ export default function SettingsScreen({ navigation }) {
           <Text style={{ fontSize: scaledFontSize(18), marginRight: 12 }}>♿</Text>
           <Text style={[styles.menuLabel, HC.text, { fontSize: scaledFontSize(15) }]}>Accessibility Features</Text>
           <Text style={[styles.menuArrow, HC.textMuted, { fontSize: scaledFontSize(22) }]}>›</Text>
-        </TouchableOpacity>
-
-        <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(13) }]}>Account</Text>
-        <TouchableOpacity style={[styles.menuItem, HC.card, HC.touch]}>
-          <Text style={{ fontSize: scaledFontSize(18), marginRight: 12 }}>🔒</Text>
-          <Text style={[styles.menuLabel, HC.text, { fontSize: scaledFontSize(15) }]}>Privacy Settings</Text>
-          <Text style={[styles.menuArrow, HC.textMuted, { fontSize: scaledFontSize(22) }]}>›</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.menuItem, HC.card, HC.touch]}>
-          <Text style={{ fontSize: scaledFontSize(18), marginRight: 12 }}>🌐</Text>
-          <Text style={[styles.menuLabel, HC.text, { fontSize: scaledFontSize(15) }]}>Language</Text>
-          <Text style={[styles.rowValue, HC.textMuted, { fontSize: scaledFontSize(14) }]}>English ›</Text>
         </TouchableOpacity>
 
         <View style={[styles.infoCard, HC.card]}>
@@ -173,10 +161,11 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
+  appearanceIcon: { marginRight: 10 },
   container: { flex: 1, backgroundColor: '#0f172a' },
   scroll: { padding: 20, paddingBottom: 100 },
-  headerSection: { marginBottom: 20 },
+  headerSection: { marginBottom: 20, padding: 20, borderRadius: 22, backgroundColor: 'rgba(79, 70, 229, 0.10)', borderWidth: 1, borderColor: 'rgba(129, 140, 248, 0.2)' },
   title: { fontSize: 24, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3 },
   subtitle: { fontSize: 14, color: '#64748b', marginTop: 4 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: '#94a3b8', marginBottom: 10, marginTop: 8, textTransform: 'uppercase', letterSpacing: 0.5 },

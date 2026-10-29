@@ -1,9 +1,13 @@
+import AppIcon from '../components/common/AppIcon';
+import { PageHeader, DataRegion } from '../components/common/UI';
 import { useState, useEffect } from 'react';
 import { categoriesApi } from '../services/api';
 import Modal from '../components/common/Modal';
 import CategoryIcon, { CATEGORY_ICON_OPTIONS, getCategoryIconKey } from '../components/common/CategoryIcon';
 
 export default function Categories() {
+  const [pageError, setPageError] = useState('');
+  const [pageLoading, setPageLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCat, setEditingCat] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -13,9 +17,10 @@ export default function Categories() {
   const [formData, setFormData] = useState({ name: '', icon: 'tag', color: '#78716c', description: '', keywords: '' });
 
   useEffect(() => {
-    categoriesApi.getAll().then(data => {
+    setPageLoading(true); setPageError('');
+    Promise.all([categoriesApi.getAll().then(data => {
       setCategories(data.map(c => ({ ...c, autoTagging: c.auto_tagging !== false })));
-    }).catch(console.error);
+    })]).catch(err => setPageError(err.message || 'Unable to load this section.')).finally(() => setPageLoading(false));
   }, []);
 
   const handleToggle = (catId) => {
@@ -72,31 +77,28 @@ export default function Categories() {
   };
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Category Management</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage item categories and auto-tagging rules</p>
-        </div>
-        <div className="flex gap-2">
+    <div className="page page-categories">
+      <PageHeader title="Categories" description={"Organize item categories and automatic tagging rules."} actions={<><div className="flex gap-2">
           {dirty && (
-            <button onClick={handleSaveAll} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shadow-sm flex items-center gap-1.5">
-              💾 Save All Changes
+            <button type="button" onClick={handleSaveAll} className="ui-button ui-button-success transition-colors flex items-center gap-1.5">
+              <AppIcon name="download" /> Save All Changes
             </button>
           )}
-          <button onClick={() => { setEditingCat(null); setFormData({ name: '', icon: 'tag', color: '#78716c', description: '', keywords: '' }); setShowModal(true); }} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
-            + Add Category
+          <button type="button" onClick={() => { setEditingCat(null); setFormData({ name: '', icon: 'tag', color: '#78716c', description: '', keywords: '' }); setShowModal(true); }} className="ui-button ui-button-primary transition-colors">
+            <AppIcon name="plus" /> Add Category
           </button>
-        </div>
-      </div>
+        </div></>} />
 
       {saveMsg && (
-        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg mb-4 text-sm">{saveMsg}</div>
+        <div className={`ui-alert ${saveMsg.startsWith('❌') ? 'ui-alert-error' : 'ui-alert-success'}`} role={saveMsg.startsWith('❌') ? 'alert' : 'status'}>
+          <AppIcon name={saveMsg.startsWith('❌') ? 'error' : 'success'} />
+          <p>{saveMsg.replace(/^[✅❌]\s*/u, '')}</p>
+        </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <DataRegion loading={pageLoading} error={pageError} onRetry={() => window.location.reload()} empty={categories.length === 0}><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {categories.map(cat => (
-          <div key={cat.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md transition-shadow">
+          <div key={cat.id} className="ui-panel p-5 transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style={{ backgroundColor: cat.color + '20' }}>
@@ -108,8 +110,8 @@ export default function Categories() {
                 </div>
               </div>
               <div className="flex gap-1">
-                <button onClick={() => handleEdit(cat)} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Edit">✏️</button>
-                <button onClick={() => setConfirmDelete(cat)} className="p-1.5 text-gray-400 hover:text-red-600" title="Delete">🗑️</button>
+                <button type="button" onClick={() => handleEdit(cat)} className="ui-button ui-button-secondary" title="Edit"><AppIcon name="edit" /></button>
+                <button type="button" onClick={() => setConfirmDelete(cat)} className="ui-button ui-button-secondary" title="Delete"><AppIcon name="delete" /></button>
               </div>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{cat.description}</p>
@@ -124,19 +126,19 @@ export default function Categories() {
             </div>
           </div>
         ))}
-      </div>
+      </div></DataRegion>
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingCat ? 'Edit Category' : 'Add New Category'} size="md">
         <form onSubmit={handleFormSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category Name</label>
-            <input type="text" required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g., Electronics" />
+            <label htmlFor="field-categories-1" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category Name</label>
+            <input id="field-categories-1" aria-label="Category Name" type="text" required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})}
+              className="ui-input w-full" placeholder="e.g., Electronics" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icon</label>
-            <select value={formData.icon} onChange={(e) => setFormData({...formData, icon: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            <label htmlFor="field-categories-2" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icon</label>
+            <select id="field-categories-2" aria-label="Icon" value={formData.icon} onChange={(e) => setFormData({...formData, icon: e.target.value})}
+              className="ui-input w-full">
               {CATEGORY_ICON_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
             <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
@@ -145,45 +147,41 @@ export default function Categories() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Color</label>
-            <input type="color" value={formData.color} onChange={(e) => setFormData({...formData, color: e.target.value})}
+            <label htmlFor="field-categories-3" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Color</label>
+            <input id="field-categories-3" aria-label="Color" type="color" value={formData.color} onChange={(e) => setFormData({...formData, color: e.target.value})}
               className="w-full h-10 px-1 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 cursor-pointer" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-            <textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" rows={3} placeholder="Describe what items belong here" />
+            <label htmlFor="field-categories-4" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+            <textarea id="field-categories-4" aria-label="Description" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})}
+              className="ui-input w-full" rows={3} placeholder="Describe what items belong here" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Auto-tagging Keywords</label>
-            <input type="text" value={formData.keywords} onChange={(e) => setFormData({...formData, keywords: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="phone, smartphone, iphone, android" />
+            <label htmlFor="field-categories-5" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Auto-tagging Keywords</label>
+            <input id="field-categories-5" aria-label="Auto-tagging Keywords" type="text" value={formData.keywords} onChange={(e) => setFormData({...formData, keywords: e.target.value})}
+              className="ui-input w-full" placeholder="phone, smartphone, iphone, android" />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Comma-separated keywords for automatic category assignment</p>
           </div>
           <div className="flex gap-2 pt-3">
-            <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            <button type="submit" className="ui-button ui-button-primary flex-1">
               {editingCat ? 'Update Category' : 'Save Category'}
             </button>
-            <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600">Cancel</button>
+            <button type="button" onClick={() => setShowModal(false)} className="ui-button ui-button-secondary flex-1">Cancel</button>
           </div>
         </form>
       </Modal>
 
       {/* Delete Confirmation */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Delete Category</h3>
+      <Modal isOpen={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Delete category" size="sm">{confirmDelete && <>
+
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
               Are you sure you want to delete "{confirmDelete.name}"? This cannot be undone.
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
-              <button onClick={() => handleDelete(confirmDelete.id)} className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
+              <button type="button" onClick={() => setConfirmDelete(null)} className="ui-button ui-button-secondary">Cancel</button>
+              <button type="button" onClick={() => handleDelete(confirmDelete.id)} className="ui-button ui-button-danger">Delete</button>
             </div>
-          </div>
-        </div>
-      )}
+          </>}</Modal>
     </div>
   );
 }

@@ -89,6 +89,11 @@ export function AppProvider({ children }) {
     document.documentElement.setAttribute('data-theme', settings.colorTheme || 'lavender');
   }, [settings.colorTheme]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('high-contrast', Boolean(settings.highContrast));
+    document.documentElement.setAttribute('data-text-size', settings.textSize || 'normal');
+  }, [settings.highContrast, settings.textSize]);
+
   return (
     <AppContext.Provider value={{ settings, toggleHighContrast, toggleDarkMode, setTextSize, updateSetting, setColorTheme }}>
       {children}

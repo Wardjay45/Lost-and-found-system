@@ -5,6 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
 const STORAGE_KEY = '@lost_and_found_server_url';
+const normalizeUrl = value => {
+  const base = value.trim().replace(/\/+$/, '');
+  return /^https?:\/\/[^/?#]+$/i.test(base) ? base + '/api' : base;
+};
 
 let cachedApiUrl = null;
 
@@ -13,8 +17,8 @@ const loadPersistedUrl = async () => {
   try {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
     if (stored) {
-      cachedApiUrl = stored;
-      return stored;
+      cachedApiUrl = normalizeUrl(stored);
+      return cachedApiUrl;
     }
   } catch (e) {
     console.warn('Failed to load server URL from storage:', e);
@@ -25,7 +29,7 @@ const loadPersistedUrl = async () => {
 // Save server URL to AsyncStorage
 export const saveServerUrl = async (url) => {
   try {
-    const cleanUrl = url.replace(/\/+$/, ''); // Remove trailing slashes
+    const cleanUrl = normalizeUrl(url); // Remove trailing slashes
     await AsyncStorage.setItem(STORAGE_KEY, cleanUrl);
     cachedApiUrl = cleanUrl;
     return true;
@@ -55,6 +59,7 @@ export const resetServerUrl = async () => {
 
 // Auto-detect server URL from environment
 const autoDetectUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) return normalizeUrl(process.env.EXPO_PUBLIC_API_URL);
   const manifest = Constants.expoConfig || Constants.manifest;
 
   // Try to get from Metro bundler (works in Expo Go dev mode only)
@@ -86,7 +91,8 @@ export const initApiUrl = async () => {
       return cachedApiUrl;
     })();
   }
-  return initPromise;
+  await initPromise;
+  return getApiUrl();
 };
 
 // Default export for convenience (synchronous - use getApiUrl or ensure initApiUrl ran first)

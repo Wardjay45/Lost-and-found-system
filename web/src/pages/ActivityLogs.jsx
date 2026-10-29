@@ -1,257 +1,107 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import AppIcon from '../components/common/AppIcon';
+import { PageHeader, DataRegion } from '../components/common/UI';
 import { activityLogsApi } from '../services/api';
-import { timeAgo } from '../utils/formatters';
+import { activityView, activityTypes, filterActivities } from '../../../shared/activityLogs.mjs';
 
-const API_URL = '/api';
-
-const actionIcons = {
-  report: '📝', match: '🔗', claim: '✅', resolve: '✔️', delete: '🗑️',
-  approve: '👍', reject: '👎', message: '📨', export: '📄',
-};
-
-const parseMatchDetails = (details) => {
-  try {
-    if (!details) return null;
-    const parsed = JSON.parse(details);
-    if (parsed.lost_item_id && parsed.found_item_id) return parsed;
-    return null;
-  } catch { return null; }
-};
+const PAGE_SIZE = 25;
+const campusTime = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
 
 export default function ActivityLogs() {
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activityLogs, setActivityLogs] = useState([]);
-  const [expandedLog, setExpandedLog] = useState(null);
-  const [ftfForm, setFtfForm] = useState({ verifiedBy: '', idVerified: true, knowledgeAnswers: '', notes: '', questions: [] });
-  const [claiming, setClaiming] = useState(false);
+  const [search, setSearch] = useState('');
+  const [logs, setLogs] = useState([]);
+  const [expanded, setExpanded] = useState(null);
+  const [page, setPage] = useState(1);
+  const requestId = useRef(0);
+  const load = useCallback(async () => {
+    const current = ++requestId.current;
+    setLoading(true); setError('');
+    try {
+      const data = await activityLogsApi.getAll();
+      if (!Array.isArray(data)) throw new Error('The activity log returned an invalid response.');
+      if (current === requestId.current) setLogs(data);
+    } catch (err) {
+      if (current === requestId.current) setError(err.message || 'Unable to load the activity log.');
+    } finally { if (current === requestId.current) setLoading(false); }
+  }, []);
+  const cancelPending = useCallback(() => { requestId.current++; }, []);
+  useEffect(() => { load(); return cancelPending; }, [load, cancelPending]);
+  const types = activityTypes(logs);
+  const filtered = filterActivities(logs, filterType, search);
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pages);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const clear = () => { setFilterType('all'); setSearch(''); setPage(1); setExpanded(null); };
 
-  useEffect(() => {
-    activityLogsApi.getAll({ action: filterType !== 'all' ? filterType : undefined }).then(setActivityLogs).catch(console.error);
-  }, [filterType]);
-
-  const filtered = activityLogs.filter(l => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const detailsText = l.details || '';
-      const matchData = parseMatchDetails(detailsText);
-      const searchText = matchData ? matchData.text : detailsText;
-      return searchText.toLowerCase().includes(q) || (l.user_name || '').toLowerCase().includes(q);
-    }
-    return true;
-  });
-
-  const getDisplayText = (log) => {
-    const matchData = parseMatchDetails(log.details);
-    return matchData ? matchData.text : log.details;
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Activity Logs</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">System activities & Face-to-Face Verification</p>
-        </div>
-        <div></div>
+  return <div className="page page-activitylogs">
+    <PageHeader title="Activity log" description="Recorded report updates, match decisions, and handovers." actions={
+      <button type="button" className="ui-button ui-button-secondary" disabled={loading} onClick={load}><AppIcon name="refresh" />{loading ? 'Refreshing…' : 'Refresh'}</button>
+    } />
+    <p className="mb-5 text-sm lf-text-muted">This is a record of past events. Verify ownership and release items from <Link className="underline" to="/items/lost">Lost items</Link>.</p>
+    <div className="ui-panel p-4 mb-5 flex flex-wrap items-end gap-3">
+      <div className="min-w-0 flex-1 sm:min-w-[180px]">
+        <label htmlFor="activity-type" className="block text-xs font-medium lf-text-muted mb-1">Activity type</label>
+        <select id="activity-type" className="ui-input w-full" value={filterType} onChange={event => { setFilterType(event.target.value); setPage(1); setExpanded(null); }}>
+          <option value="all">All activities ({logs.length})</option>
+          {types.map(type => <option key={type.value} value={type.value}>{type.label} ({type.count})</option>)}
+          {filterType !== 'all' && !types.some(type => type.value === filterType) && <option value={filterType}>{activityView({ action: filterType }).label} (0)</option>}
+        </select>
       </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 mb-6">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="min-w-[160px]">
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Type</label>
-            <select value={filterType} onChange={e => { setFilterType(e.target.value); setExpandedLog(null); }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
-              <option value="all">All Activities</option>
-              <option value="report">Reports</option>
-              <option value="match">Matches</option>
-              <option value="claim">Claims</option>
-              <option value="approve">Approvals</option>
-              <option value="reject">Rejections</option>
-              <option value="resolve">Resolutions</option>
-              <option value="update">Updates</option>
-              <option value="delete">Deletions</option>
-              <option value="message">Messages</option>
-            </select>
-          </div>
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Search</label>
-            <input type="text" placeholder="Search..." value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none" />
-          </div>
-        </div>
+      <div className="w-full sm:flex-[2] sm:w-auto min-w-0">
+        <label htmlFor="activity-search" className="block text-xs font-medium lf-text-muted mb-1">Search activity</label>
+        <input id="activity-search" className="ui-input w-full" type="search" placeholder="Action, report, administrator, or details…" value={search} onChange={event => { setSearch(event.target.value); setPage(1); setExpanded(null); }} />
       </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="divide-y divide-gray-100 dark:divide-gray-700">
-          {filtered.map(log => {
-            const matchData = parseMatchDetails(log.details);
-            const displayText = getDisplayText(log);
-            const isMatchLog = log.action === 'match' && matchData;
-            const isExpanded = expandedLog === log.id;
-
-            return (
-              <div key={log.id}>
-                <div
-                  className={`flex items-start gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer ${isExpanded ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''}`}
-                  onClick={() => {
-                    setExpandedLog(isExpanded ? null : log.id);
-                    if (!isExpanded) {
-                      setFtfForm({ verifiedBy: '', idVerified: true, knowledgeAnswers: '', notes: '' });
-                    }
-                  }}
-                >
-                  <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center text-lg flex-shrink-0">
-                    {actionIcons[log.action] || '📋'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white capitalize">{log.action}</p>
-                      {isMatchLog && (
-                        <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded text-xs font-medium">
-                          🔗 {Math.round((matchData.score || 0) * 100)}% match — Pending FTF
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{displayText}</p>
-                    {matchData && (
-                      <p className="text-xs text-indigo-500 dark:text-indigo-400 mt-1">
-                        Lost: {matchData.lost_item_name} | Found: {matchData.found_item_name}
-                      </p>
-                    )}
-                    <div className="flex gap-3 mt-1">
-                      {log.user_name && <span className="text-xs text-gray-400">User: {log.user_name}</span>}
-                      {log.role && <span className="text-xs text-gray-400">Role: {log.role}</span>}
-                      <span className="text-xs text-gray-400">{timeAgo(log.timestamp)}</span>
-                    </div>
-                  </div>
-                  <span className="text-gray-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
-                </div>
-
-                {/* Expanded FTF Verification Form */}
-                {isExpanded && isMatchLog && (
-                  <div className="px-4 pb-5 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-100 dark:border-gray-700">
-                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white pt-4 mb-3">
-                      ✅ Face-to-Face Verification
-                    </h4>
-
-                    {/* Match summary */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                        <p className="text-xs font-medium text-red-700 dark:text-red-400">🔍 Lost Item</p>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{matchData.lost_item_name}</p>
-                        <p className="text-xs text-gray-500">Lost by: {matchData.lost_reporter_name || 'N/A'}</p>
-                        <p className="text-xs text-gray-400">Student ID: {matchData.lost_reporter_id || 'N/A'}</p>
-                      </div>
-                      <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <p className="text-xs font-medium text-green-700 dark:text-green-400">📦 Found Item</p>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{matchData.found_item_name}</p>
-                        <p className="text-xs text-gray-500">Similarity: {Math.round((matchData.score || 0) * 100)}%</p>
-                      </div>
-                    </div>
-
-                    {/* FTF Verification Form */}
-                    <div className="space-y-3">
-                      <label className="flex items-center gap-3 p-3 bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 cursor-pointer">
-                        <input type="checkbox" checked={ftfForm.idVerified}
-                          onChange={(e) => setFtfForm({ ...ftfForm, idVerified: e.target.checked })}
-                          className="w-5 h-5 rounded accent-indigo-600" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">🪪 School ID Verified</p>
-                          <p className="text-xs text-gray-500">Student presented a valid school ID matching the reporter</p>
-                        </div>
-                      </label>
-
-                      {/* Knowledge Check — Q&A style */}
-                      <div className="p-3 bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">❓ Knowledge Check (Q&A)</p>
-                        <p className="text-xs text-gray-500 mb-2">Ask the student to describe the item. Record their answers below.</p>
-                        <p className="text-xs text-gray-400 mb-2">
-                          Suggested questions: What color is the item? What brand? Any distinguishing marks or features? Where was it lost? When was it lost?
-                        </p>
-                        <textarea
-                          value={ftfForm.knowledgeAnswers}
-                          onChange={(e) => setFtfForm({ ...ftfForm, knowledgeAnswers: e.target.value })}
-                          placeholder="Student's answers...&#10;e.g.&#10;Q: What color? A: Black&#10;Q: What brand? A: Nike&#10;Q: Any marks? A: Has a scratch on the bottom&#10;Q: Where lost? A: Library 2nd floor"
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none"
-                          rows={5}
-                        />
-                        <label className="flex items-center gap-2 mt-2">
-                          <input type="checkbox" checked={ftfForm.knowledgePassed}
-                            onChange={(e) => setFtfForm({ ...ftfForm, knowledgePassed: e.target.checked })}
-                            className="w-4 h-4 rounded accent-indigo-600" />
-                          <span className="text-xs text-gray-500">Knowledge check passed — student correctly identified the item</span>
-                        </label>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Admin Name *</label>
-                        <input type="text" value={ftfForm.verifiedBy}
-                          onChange={(e) => setFtfForm({ ...ftfForm, verifiedBy: e.target.value })}
-                          placeholder="e.g. Admin User"
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Notes (optional)</label>
-                        <textarea value={ftfForm.notes}
-                          onChange={(e) => setFtfForm({ ...ftfForm, notes: e.target.value })}
-                          placeholder="Additional notes..."
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none" rows={2} />
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={async () => {
-                          if (!ftfForm.verifiedBy.trim()) return alert('Please enter the admin name');
-                          if (!ftfForm.idVerified) return alert('Please verify the school ID first');
-                          if (!ftfForm.knowledgePassed) return alert('Please confirm the knowledge check passed');
-                          setClaiming(true);
-                          try {
-                            const res = await fetch(`${API_URL}/lost-items/${matchData.lost_item_id}/claim`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                found_item_id: matchData.found_item_id,
-                                verified_by: ftfForm.verifiedBy,
-                                id_verified: ftfForm.idVerified,
-                                knowledge_passed: ftfForm.knowledgePassed,
-                                notes: `Knowledge Answers: ${ftfForm.knowledgeAnswers || 'N/A'}. ${ftfForm.notes}`,
-                              }),
-                            });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data.error || 'Claim failed');
-                            setExpandedLog(null);
-                            alert('✅ Item released! Claim recorded in activity log.');
-                            activityLogsApi.getAll({ action: filterType !== 'all' ? filterType : undefined }).then(setActivityLogs).catch(console.error);
-                          } catch (e) {
-                            alert('❌ Error: ' + e.message);
-                          } finally {
-                            setClaiming(false);
-                          }
-                        }}
-                        disabled={claiming || !ftfForm.verifiedBy.trim()}
-                        className="flex-1 bg-green-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-                      >
-                        {claiming ? 'Processing...' : '✅ Approve & Release Item'}
-                      </button>
-                      <button onClick={() => setExpandedLog(null)}
-                        className="px-6 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600">
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {filtered.length === 0 && (
-            <div className="p-8 text-center text-gray-500 dark:text-gray-400">No activity logs found.</div>
-          )}
-        </div>
-      </div>
+      <button type="button" className="ui-button ui-button-secondary" disabled={filterType === 'all' && !search} onClick={clear}>Clear filters</button>
     </div>
-  );
+    <DataRegion loading={loading} error={error} onRetry={load} empty={filtered.length === 0}
+      emptyTitle={logs.length ? 'No matching activity' : 'No activity recorded yet'}
+      emptyDescription={logs.length ? 'Clear your search or choose another activity type.' : 'Recorded report changes and match decisions will appear here.'}>
+      <div className="ui-panel overflow-hidden">
+        <p role="status" aria-live="polite" className="p-4 text-sm lf-text-muted border-b border-[var(--lf-30-border)]">Showing {start + 1}–{Math.min(start + PAGE_SIZE, filtered.length)} of {filtered.length} activities</p>
+        <ol className="divide-y divide-[var(--lf-30-border)]">
+          {filtered.slice(start, start + PAGE_SIZE).map(log => {
+            const view = activityView(log), open = expanded === log.id;
+            const hasDetails = Boolean(view.pair || view.notes || view.recoveryId);
+            return <li key={log.id} className="p-4 sm:p-5">
+              <div className="flex items-start gap-3">
+                <span className="shrink-0 rounded-xl p-2.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300"><AppIcon name={view.icon} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2"><h2 className="text-sm font-semibold lf-text-primary">{view.label}</h2>
+                    {view.action === 'match' && view.similarity !== null && <span className="text-xs lf-text-muted">{view.similarity}% recorded similarity</span>}
+                  </div>
+                  <p className="mt-1 text-sm lf-text-primary whitespace-pre-wrap break-words">{view.summary}</p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs lf-text-muted">
+                    <span>By {log.user_name || 'Not recorded'}{log.role ? ` · ${log.role}` : ''}</span>
+                    <time dateTime={view.timestamp || undefined}>{view.timestamp ? campusTime.format(new Date(view.timestamp)) : 'Time not recorded'}</time>
+                  </div>
+                  {hasDetails && <button type="button" className="ui-button ui-button-secondary mt-3" aria-expanded={open} aria-controls={`activity-details-${log.id}`} onClick={() => setExpanded(open ? null : log.id)}>
+                    {open ? 'Hide details' : 'View details'}<AppIcon name={open ? 'close' : 'down'} />
+                  </button>}
+                </div>
+              </div>
+              {hasDetails && open && <section id={`activity-details-${log.id}`} aria-label="Recorded event details" className="mt-4 rounded-xl border border-[var(--lf-30-border)] p-4 space-y-3">
+                <p className="text-xs lf-text-muted">Historical snapshot — current report status may differ.</p>
+                {view.pair && <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  <div className="min-w-0"><dt className="lf-text-muted">Lost report #{view.pair.lostId}</dt><dd className="lf-text-primary break-words whitespace-pre-wrap">{view.pair.lostName}</dd></div>
+                  <div className="min-w-0"><dt className="lf-text-muted">Found report #{view.pair.foundId}</dt><dd className="lf-text-primary break-words whitespace-pre-wrap">{view.pair.foundName}</dd></div>
+                </dl>}
+                {view.notes && <div><p className="text-xs lf-text-muted">Recorded notes</p><p className="text-sm lf-text-primary break-words whitespace-pre-wrap">{view.notes}</p></div>}
+                {view.recoveryId && <p className="text-xs lf-text-muted break-all">Recovery reference: {view.recoveryId}</p>}
+                <p className="text-xs lf-text-muted">Recorded action: {view.originalAction}</p>
+              </section>}
+            </li>;
+          })}
+        </ol>
+        {pages > 1 && <nav aria-label="Activity log pages" className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--lf-30-border)] p-4">
+          <button type="button" className="ui-button ui-button-secondary" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); setExpanded(null); }}><AppIcon name="back" />Previous</button>
+          <span className="text-sm lf-text-muted">Page {currentPage} of {pages}</span>
+          <button type="button" className="ui-button ui-button-secondary" disabled={currentPage === pages} onClick={() => { setPage(currentPage + 1); setExpanded(null); }}>Next<AppIcon name="arrow" /></button>
+        </nav>}
+      </div>
+    </DataRegion>
+  </div>;
 }

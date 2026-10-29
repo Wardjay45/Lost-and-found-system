@@ -1,7 +1,11 @@
+import { backgroundTask } from '../services/backgroundTask.js';
+import { aiFetch } from '../services/aiClient.js';
 import { Router } from 'express';
 import multer from 'multer';
 import supabase from '../db.js';
-import { normalizeLocation } from '../location-normalizer.js';
+import { readAll } from '../services/readAll.js';
+import { requireReportLocation, parseLocationDetails } from '../services/reportLocations.js';
+import { createRecoveryClaimHandler } from './recoveryFeedback.js';
 
 const router = Router();
 
@@ -26,7 +30,7 @@ const generateEmbeddings = async (itemId, table, imageUrl, description) => {
     // Text embedding
     if (description) {
       try {
-        const r = await fetch(`${AI_URL}/embedding/text`, {
+        const r = await aiFetch(`${AI_URL}/embedding/text`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: description }),
@@ -62,7 +66,7 @@ const generateEmbeddings = async (itemId, table, imageUrl, description) => {
           imageBase64 = `data:image/jpeg;base64,${imageBase64}`;
         }
         if (imageBase64) {
-          const r = await fetch(`${AI_URL}/embedding/image-base64`, {
+          const r = await aiFetch(`${AI_URL}/embedding/image-base64`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: imageBase64 }),
@@ -137,6 +141,8 @@ router.post('/upload', upload.single('image'), async (req, res) => {
     if (!description || !location_lost) {
       return res.status(400).json({ error: 'Description and location are required' });
     }
+    const locationDetails = parseLocationDetails(req.body.location_details);
+    const approvedLocation = await requireReportLocation(supabase, location_lost);
     let imageUrl = null;
     if (req.file) {
       imageUrl = await uploadBuffer(req.file.buffer, req.file.mimetype);
@@ -152,16 +158,17 @@ router.post('/upload', upload.single('image'), async (req, res) => {
         item_id: itemId, description,
         category_name: category_name || 'Miscellaneous',
         category_icon: '📦',
-        location_lost: normalizeLocation(location_lost),
+        location_lost: approvedLocation,
+        location_details: locationDetails,
         reporter_name, reporter_id, image: imageUrl, status: 'active',
       })
       .select().single();
     if (error) throw error;
     await logActivity('report', `Lost item reported: ${data.item_id} — ${description}`, reporter_name || 'Admin');
-    generateEmbeddings(data.id, 'lost_items', imageUrl, description).catch(() => {});
+    backgroundTask(generateEmbeddings(data.id, 'lost_items', imageUrl, description));
     res.status(201).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -173,9 +180,8 @@ router.get('/', async (req, res) => {
     if (status && status !== 'all') query = query.eq('status', status);
     if (category && category !== 'all') query = query.eq('category_name', category);
     const sortField = sort === 'status' ? 'status' : 'date_reported';
-    query = query.order(sortField, { ascending: false });
-    const { data, error } = await query;
-    if (error) throw error;
+    query = query.order(sortField, { ascending: false }).order('id', { ascending: false });
+    const data = await readAll(query);
     let filtered = data;
     if (search) {
       const q = search.toLowerCase();
@@ -188,7 +194,7 @@ router.get('/', async (req, res) => {
     }
     res.json(filtered);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -204,7 +210,7 @@ router.get('/:id', async (req, res) => {
     if (!data) return res.status(404).json({ error: 'Lost item not found' });
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -215,6 +221,8 @@ router.post('/', async (req, res) => {
     if (!description || !location_lost) {
       return res.status(400).json({ error: 'Description and location are required' });
     }
+    const locationDetails = parseLocationDetails(req.body.location_details);
+    const approvedLocation = await requireReportLocation(supabase, location_lost);
     const imageUrl = await uploadBase64(image);
     const { count } = await supabase.from('lost_items').select('*', { count: 'exact', head: true });
     const itemId = `LOST-${String((count || 0) + 1).padStart(4, '0')}`;
@@ -225,16 +233,17 @@ router.post('/', async (req, res) => {
         category_id: category_id || null,
         category_name: category_name || 'Miscellaneous',
         category_icon: category_icon || '📦',
-        location_lost: normalizeLocation(location_lost),
+        location_lost: approvedLocation,
+        location_details: locationDetails,
         reporter_name, reporter_id, image: imageUrl, status: 'active',
       })
       .select().single();
     if (error) throw error;
     // Generate AI embeddings in background (don't block response)
-    generateEmbeddings(data.id, 'lost_items', imageUrl, description).catch(() => {});
+    backgroundTask(generateEmbeddings(data.id, 'lost_items', imageUrl, description));
     res.status(201).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -264,7 +273,7 @@ router.put('/:id/status', async (req, res) => {
     await logActivity(action, logDetail);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -277,7 +286,8 @@ router.put('/:id', async (req, res) => {
     if (category_id !== undefined) updates.category_id = category_id;
     if (category_name !== undefined) updates.category_name = category_name;
     if (category_icon !== undefined) updates.category_icon = category_icon;
-    if (location_lost !== undefined) updates.location_lost = normalizeLocation(location_lost);
+    if (location_lost !== undefined) updates.location_lost = await requireReportLocation(supabase, location_lost);
+    if (req.body.location_details !== undefined) updates.location_details = parseLocationDetails(req.body.location_details);
     if (image !== undefined) updates.image = image;
     if (status !== undefined) updates.status = status;
     const { data, error } = await supabase
@@ -291,57 +301,12 @@ router.put('/:id', async (req, res) => {
     await logActivity('update', `Lost item ${req.params.id} updated`);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 // POST /api/lost-items/:id/claim - FTF verification and claim
-router.post('/:id/claim', async (req, res) => {
-  try {
-    const { found_item_id, verified_by, id_verified, knowledge_passed, notes } = req.body;
-    if (!verified_by) {
-      return res.status(400).json({ error: 'Admin name (verified_by) is required' });
-    }
-
-    // 1. Update lost item status to claimed
-    const { data: lostItem, error: lostErr } = await supabase
-      .from('lost_items')
-      .update({ status: 'claimed', resolved_date: new Date().toISOString(), last_updated: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .select()
-      .single();
-    if (lostErr) throw lostErr;
-    if (!lostItem) return res.status(404).json({ error: 'Lost item not found' });
-
-    // 2. Update found item status to claimed
-    if (found_item_id) {
-      await supabase
-        .from('found_items')
-        .update({ status: 'claimed', resolved_date: new Date().toISOString(), last_updated: new Date().toISOString() })
-        .eq('id', found_item_id);
-    }
-
-    // 3. Log the claim activity
-    const verificationDetails = `Claim approved by ${verified_by}. ID Verified: ${id_verified ? 'Yes' : 'No'}. Knowledge Check: ${knowledge_passed ? 'Passed' : 'Not passed'}.${notes ? ` Notes: ${notes}` : ''}`;
-    await logActivity('Item Claimed', verificationDetails, verified_by, 'admin');
-
-    // 4. Update user items_claimed count
-    if (lostItem.reporter_id) {
-      try {
-        await supabase.rpc('increment_items_claimed', { user_id: lostItem.reporter_id });
-      } catch {
-        const { data: currentUser } = await supabase
-          .from('users').select('items_claimed').eq('id', lostItem.reporter_id).single();
-        const newCount = (currentUser?.items_claimed || 0) + 1;
-        await supabase.from('users').update({ items_claimed: newCount }).eq('id', lostItem.reporter_id);
-      }
-    }
-
-    res.json({ success: true, lost_item: lostItem, message: 'Item claimed successfully. Verification recorded.' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+router.post('/:id/claim', createRecoveryClaimHandler());
 
 // DELETE /api/lost-items/:id
 router.delete('/:id', async (req, res) => {
@@ -350,7 +315,7 @@ router.delete('/:id', async (req, res) => {
     if (error) throw error;
     res.json({ message: 'Lost item deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

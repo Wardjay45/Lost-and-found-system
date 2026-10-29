@@ -1,16 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { TouchableOpacity, TextInput } from './SpeechControls';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Modal,
-  Animated, TextInput, Dimensions, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, Modal,
+  Animated, Dimensions, KeyboardAvoidingView, Platform,
   ActivityIndicator, Alert
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { File } from 'expo-file-system/next';
+import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
+import FormIcon from './FormIcon';
+import { useAuth } from '../context/AuthContext';
+import { initApiUrl } from '../config/api';
 
 const { height } = Dimensions.get('window');
 const BARS = 7;
 
 export default function SpeechInputModal({ visible, onClose, onResult, fieldName }) {
+  const styles = useThemedStyles(baseStyles);
+  const { token } = useAuth();
+  const { themeColors, stopSpeaking } = useAccessibility();
   const [phase, setPhase] = useState('listening');
   const [transcript, setTranscript] = useState('');
   const [recording, setRecording] = useState(null);
@@ -25,6 +33,7 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
 
   useEffect(() => {
     if (!visible) return;
+    stopSpeaking();
     isStopping.current = false;
     setTranscript('');
     setError('');
@@ -50,6 +59,7 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
 
   const startRecording = async () => {
     try {
+      await stopSpeaking();
       const perm = await Audio.requestPermissionsAsync();
       if (!perm.granted) {
         setPhase('editing');
@@ -138,38 +148,22 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
         return;
       }
 
-      // Call Deepgram API directly (no server proxy needed)
+      // Send audio to the authenticated server; the provider key stays off the device.
       try {
         const file = new File(uri);
         const base64 = await file.base64();
 
-        const audioBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        const payloadSizeKB = (audioBuffer.length / 1024).toFixed(1);
-        console.log(`🎤 Sending ${payloadSizeKB}KB audio directly to Deepgram...`);
-
-        // Detect audio MIME type from file header
-        let mimeType = 'audio/mp4'; // default for Expo (M4A)
-        if (audioBuffer[0] === 0x52 && audioBuffer[1] === 0x49) mimeType = 'audio/wav';
-        else if (audioBuffer[0] === 0x1A && audioBuffer[1] === 0x45) mimeType = 'audio/webm';
-        else if (audioBuffer[0] === 0x4F && audioBuffer[1] === 0x67) mimeType = 'audio/ogg';
-        else if (audioBuffer[0] === 0xFF && (audioBuffer[1] & 0xE0) === 0xE0) mimeType = 'audio/mpeg';
-        console.log(`🎤 Detected format: ${mimeType}`);
-
-        // Load the Deepgram key from an environment variable — never hardcode secrets.
-        // Set EXPO_PUBLIC_DEEPGRAM_API_KEY in your Expo .env / EAS config.
-        const DEEPGRAM_API_KEY = process.env.EXPO_PUBLIC_DEEPGRAM_API_KEY || '';
-        const DEEPGRAM_URL = 'https://api.deepgram.com/v1/listen?model=nova-3&language=en&smart_format=true';
-
+        const speechUrl = (await initApiUrl()) + '/speech-to-text';
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 20000);
 
-        const res = await fetch(DEEPGRAM_URL, {
+        const res = await fetch(speechUrl, {
           method: 'POST',
           headers: {
-            'Authorization': `Token ${DEEPGRAM_API_KEY}`,
-            'Content-Type': mimeType,
+            'Authorization': 'Bearer ' + (token || ''),
+            'Content-Type': 'application/json',
           },
-          body: audioBuffer,
+          body: JSON.stringify({ audio: base64 }),
           signal: controller.signal,
         });
         clearTimeout(timeout);
@@ -177,8 +171,8 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
 
         if (res.ok) {
           const result = await res.json();
-          const text = result.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
-          const confidence = result.results?.channels?.[0]?.alternatives?.[0]?.confidence || 0;
+          const text = result.transcript || '';
+          const confidence = result.confidence || 0;
 
           if (text) {
             console.log(`✅ Transcribed: "${text.substring(0, 80)}" (${(confidence * 100).toFixed(0)}%)`);
@@ -280,10 +274,10 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
       <Modal transparent visible={visible} animationType="fade" onRequestClose={handleClose}>
         <View style={styles.backdrop}>
           <Animated.View style={[styles.card, { opacity: fadeIn }]}>
-            <Text style={styles.title}>🎤 Listening...</Text>
+            <Text style={styles.title}>Listening...</Text>
             <Text style={styles.field}>{fieldName}</Text>
 
-            <TouchableOpacity style={styles.micArea} onPress={handleTapToStop} activeOpacity={0.9}>
+            <TouchableOpacity accessibilityLabel="Stop recording" speechFeedback={false} style={styles.micArea} onPress={handleTapToStop} activeOpacity={0.9}>
               <View style={styles.waveform}>
                 {barAnims.map((anim, i) => (
                   <Animated.View key={i} style={[styles.bar, { transform: [{ scaleY: anim }], opacity: anim }]} />
@@ -291,7 +285,7 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
               </View>
               <View style={styles.micContainer}>
                 <Animated.View style={[styles.micRing, { transform: [{ scale: pulseAnim }] }]} />
-                <View style={styles.micBtn}><Text style={styles.micIcon}>🎤</Text></View>
+                <View style={styles.micBtn}><FormIcon name="mic" size={28} color="#ffffff" /></View>
               </View>
               <Text style={styles.listeningText}>Recording...</Text>
               <Text style={styles.hint}>Tap to stop & transcribe</Text>
@@ -313,10 +307,10 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
       <Modal transparent visible={visible} animationType="fade" onRequestClose={handleClose}>
         <View style={styles.backdrop}>
           <View style={styles.card}>
-            <Text style={styles.title}>🧠 Transcribing...</Text>
+            <Text style={styles.title}>Transcribing...</Text>
             <Text style={styles.field}>{fieldName}</Text>
             <View style={styles.spinner}>
-              <ActivityIndicator size="large" color="#4f46e5" />
+              <ActivityIndicator size="large" color={themeColors.accent} />
               <Text style={styles.procText}>Deepgram Nova-3 AI</Text>
             </View>
           </View>
@@ -330,18 +324,18 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
     <Modal transparent visible={visible} animationType="fade" onRequestClose={handleClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.title}>✏️ Review Input</Text>
+          <Text style={styles.title}>Review Input</Text>
           <Text style={styles.field}>{fieldName}</Text>
 
           {error ? (
             <View style={styles.errorWrap}>
               <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity style={styles.retryBtn} onPress={handleRetry}>
-                <Text style={styles.retryText}>🔄 Retry Recording</Text>
+                <Text style={styles.retryText}>Retry Recording</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <Text style={styles.successText}>✅ Transcribed — edit if needed</Text>
+            <Text style={styles.successText}>Transcribed — edit if needed</Text>
           )}
 
           <TextInput
@@ -349,7 +343,7 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
             value={transcript}
             onChangeText={setTranscript}
             placeholder="Edit or type here..."
-            placeholderTextColor="#475569"
+            placeholderTextColor={themeColors.muted}
             multiline
             autoFocus
             textAlignVertical="top"
@@ -374,6 +368,8 @@ export default function SpeechInputModal({ visible, onClose, onResult, fieldName
 }
 
 export function MicButton({ onPress, active }) {
+  const styles = useThemedStyles(baseStyles);
+  const { themeColors } = useAccessibility();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (active) {
@@ -389,15 +385,15 @@ export function MicButton({ onPress, active }) {
   }, [active]);
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.micBtnSmall}>
+    <TouchableOpacity accessibilityLabel="Use voice input" speechFeedback={false} onPress={onPress} activeOpacity={0.7} style={styles.micBtnSmall}>
       <Animated.View style={[styles.micBtnInner, active && styles.micBtnActive, { transform: [{ scale: scaleAnim }] }]}>
-        <Text style={styles.micBtnIcon}>🎤</Text>
+        <FormIcon name="mic" size={18} color={themeColors.accent} />
       </Animated.View>
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 },
   card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(148,163,184,0.1)', maxHeight: height * 0.75 },
   title: { fontSize: 20, fontWeight: '800', color: '#f1f5f9', textAlign: 'center' },
@@ -408,7 +404,6 @@ const styles = StyleSheet.create({
   micContainer: { alignItems: 'center', justifyContent: 'center', marginBottom: 16, width: 88, height: 88 },
   micRing: { position: 'absolute', width: 88, height: 88, borderRadius: 44, backgroundColor: 'rgba(129,140,248,0.2)' },
   micBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#4f46e5', justifyContent: 'center', alignItems: 'center' },
-  micIcon: { fontSize: 28 },
   listeningText: { fontSize: 18, fontWeight: '700', color: '#818cf8', marginBottom: 4 },
   hint: { fontSize: 14, color: '#64748b', marginBottom: 2 },
   autoHint: { fontSize: 11, color: '#475569', marginBottom: 16 },
@@ -424,12 +419,11 @@ const styles = StyleSheet.create({
   cancelS: { flex: 1, backgroundColor: 'rgba(30,41,59,0.8)', borderRadius: 14, padding: 15, alignItems: 'center' },
   cancelSText: { color: '#94a3b8', fontSize: 15, fontWeight: '600' },
   useBtn: { flex: 2, backgroundColor: '#4f46e5', borderRadius: 14, padding: 15, alignItems: 'center' },
-  useBtnDisabled: { backgroundColor: '#334155' },
+  useBtnDisabled: { backgroundColor: '#475569' },
   useText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   cancelBtn: { backgroundColor: 'rgba(30,41,59,0.8)', borderRadius: 14, padding: 15, alignItems: 'center', marginTop: 0 },
   cancelText: { color: '#94a3b8', fontSize: 15, fontWeight: '600', textAlign: 'center' },
   micBtnSmall: { padding: 4 },
   micBtnInner: { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(79,70,229,0.15)', borderWidth: 1, borderColor: 'rgba(129,140,248,0.3)', justifyContent: 'center', alignItems: 'center' },
   micBtnActive: { backgroundColor: 'rgba(239,68,68,0.2)', borderColor: '#ef4444' },
-  micBtnIcon: { fontSize: 16 },
 });

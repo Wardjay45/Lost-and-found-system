@@ -1,6 +1,9 @@
 ---
 name: mobile-ui
 description: Improve or review the Lost & Found React Native mobile app's screens, navigation, accessibility, and user flows, with appropriate visual and functional checks. Use for mobile UI work in this repository; not for the admin web app or API-only changes.
+metadata:
+  author: "Lost & Found Project"
+  version: "1.0.0"
 ---
 
 # Mobile UI work

@@ -1,3 +1,5 @@
+import { prepareCandidateEmbeddings } from '../services/candidateEmbeddings.js';
+import { aiFetch } from '../services/aiClient.js';
 import { Router } from 'express';
 import supabase from '../db.js';
 
@@ -41,6 +43,7 @@ router.post('/match', async (req, res) => {
     const { data: storedItems, error: fetchError } = await supabase
       .from(searchTable)
       .select('*')
+      .in('status', ['active', 'pending'])
       .limit(500);
 
     if (fetchError) throw fetchError;
@@ -64,7 +67,7 @@ router.post('/match', async (req, res) => {
       text_weight: 0.3,
     };
 
-    const aiResponse = await fetch(`${AI_URL}/combined-search`, {
+    const aiResponse = await aiFetch(`${AI_URL}/combined-search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody),
@@ -89,7 +92,9 @@ router.post('/match', async (req, res) => {
         description: match?.description,
         category_name: match?.category_name,
         location: match?.location_lost || match?.location_found,
-        image: match?.image,
+        location_details: match?.location_details,
+        condition: match?.condition,
+        image: match?.image_url || match?.image,
         status: match?.status,
         reporter_name: match?.reporter_name || match?.finder_name,
         date_reported: match?.date_reported || match?.date_found,
@@ -129,6 +134,8 @@ router.post('/auto-match', async (req, res) => {
       });
     }
 
+    await prepareCandidateEmbeddings(supabase, foundItems);
+
     // Prepare found items embeddings for AI server
     const foundAiItems = foundItems.map(item => ({
       id: item.id,
@@ -137,6 +144,7 @@ router.post('/auto-match', async (req, res) => {
     }));
 
     const allMatches = [];
+    let successfulComparisons = 0;
 
     // For each lost item, match against all found items
     for (const lost of lostItems) {
@@ -159,13 +167,14 @@ router.post('/auto-match', async (req, res) => {
           text_weight: 0.3,
         };
 
-        const aiResponse = await fetch(`${AI_URL}/combined-search`, {
+        const aiResponse = await aiFetch(`${AI_URL}/combined-search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(reqBody),
         });
 
         if (!aiResponse.ok) continue;
+        successfulComparisons++;
         const aiResult = await aiResponse.json();
 
         for (const m of (aiResult.matches || [])) {
@@ -183,6 +192,8 @@ router.post('/auto-match', async (req, res) => {
               description: lost.description,
               category_name: lost.category_name,
               location: lost.location_lost,
+              location_details: lost.location_details,
+              last_updated: lost.last_updated,
               image: lost.image,
               status: lost.status,
               reporter_name: lost.reporter_name,
@@ -194,6 +205,11 @@ router.post('/auto-match', async (req, res) => {
               description: found.description,
               category_name: found.category_name,
               location: found.location_lost || found.location_found,
+              location_details: found.location_details,
+              last_updated: found.last_updated,
+              condition: found.condition,
+              finder_name: found.finder_name,
+              date_found: found.date_found,
               image: found.image,
               status: found.status,
               reporter_name: found.reporter_name || found.finder_name,
@@ -205,6 +221,8 @@ router.post('/auto-match', async (req, res) => {
         console.log(`Auto-match failed for lost#${lost.id}:`, e.message);
       }
     }
+
+    if (!successfulComparisons) return res.status(503).json({ error: 'The AI service could not complete matching. Please try again.' });
 
     // Sort by score descending
     allMatches.sort((a, b) => b.score - a.score);
@@ -244,7 +262,7 @@ router.post('/embed', async (req, res) => {
     let textEmb = null;
     if (item.description) {
       try {
-        const textResp = await fetch(`${AI_URL}/embedding/text`, {
+        const textResp = await aiFetch(`${AI_URL}/embedding/text`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: item.description }),
@@ -268,7 +286,7 @@ router.post('/embed', async (req, res) => {
       }
       if (imageBase64) {
       try {
-        const imgResp = await fetch(`${AI_URL}/embedding/image-base64`, {
+        const imgResp = await aiFetch(`${AI_URL}/embedding/image-base64`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image: imageBase64 }),
@@ -332,7 +350,7 @@ router.post('/batch-embed', async (req, res) => {
 
         // Regenerate text embedding if item has description (and either forced or missing)
         if (item.description && (force || !item.text_embedding)) {
-          const textResp = await fetch(`${AI_URL}/embedding/text`, {
+          const textResp = await aiFetch(`${AI_URL}/embedding/text`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: item.description }),
@@ -352,7 +370,7 @@ router.post('/batch-embed', async (req, res) => {
             imageBase64 = await fetchImageAsBase64(item.image);
           }
           if (imageBase64) {
-          const imgResp = await fetch(`${AI_URL}/embedding/image-base64`, {
+          const imgResp = await aiFetch(`${AI_URL}/embedding/image-base64`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: imageBase64 }),
@@ -443,7 +461,7 @@ router.get('/match-for-item/:id/:table', async (req, res) => {
     let imgScore = 0, txtScore = 0;
     if (lostItem.image_embedding && foundItem.image_embedding) {
       try {
-        const r = await fetch(`${AI_URL}/similarity`, {
+        const r = await aiFetch(`${AI_URL}/similarity`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query_embedding: lostItem.image_embedding, stored_embeddings: [foundItem.image_embedding], top_k: 1 }),
         });
@@ -452,7 +470,7 @@ router.get('/match-for-item/:id/:table', async (req, res) => {
     }
     if (lostItem.text_embedding && foundItem.text_embedding) {
       try {
-        const r = await fetch(`${AI_URL}/similarity`, {
+        const r = await aiFetch(`${AI_URL}/similarity`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query_embedding: lostItem.text_embedding, stored_embeddings: [foundItem.text_embedding], top_k: 1 }),
         });
@@ -468,8 +486,8 @@ router.get('/match-for-item/:id/:table', async (req, res) => {
     res.json({
       match: {
         score, image_score: imgScore, text_score: txtScore,
-        lost_item: { id: lostItem.id, item_id: lostItem.item_id, description: lostItem.description, category_name: lostItem.category_name, location: lostItem.location_lost, image: lostItem.image, status: lostItem.status, reporter_name: lostItem.reporter_name, date_reported: lostItem.date_reported },
-        found_item: { id: foundItem.id, item_id: foundItem.item_id, description: foundItem.description, category_name: foundItem.category_name, location: foundItem.location_found, image: foundItem.image, status: foundItem.status, finder_name: foundItem.finder_name, date_found: foundItem.date_found },
+        lost_item: { id: lostItem.id, item_id: lostItem.item_id, description: lostItem.description, category_name: lostItem.category_name, location: lostItem.location_lost, location_details: lostItem.location_details, last_updated: lostItem.last_updated, image: lostItem.image, status: lostItem.status, reporter_name: lostItem.reporter_name, date_reported: lostItem.date_reported },
+        found_item: { id: foundItem.id, item_id: foundItem.item_id, description: foundItem.description, category_name: foundItem.category_name, location: foundItem.location_found, location_details: foundItem.location_details, last_updated: foundItem.last_updated, condition: foundItem.condition, image: foundItem.image, status: foundItem.status, finder_name: foundItem.finder_name, date_found: foundItem.date_found },
       },
     });
   } catch (err) {
@@ -501,7 +519,7 @@ router.post('/compute-match-scores', async (req, res) => {
 
     if (lostImg && foundImg) {
       try {
-        const r = await fetch(`${AI_URL}/similarity`, {
+        const r = await aiFetch(`${AI_URL}/similarity`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query_embedding: lostImg, stored_embeddings: [foundImg], top_k: 1 }),
         });
@@ -511,7 +529,7 @@ router.post('/compute-match-scores', async (req, res) => {
 
     if (lostText && foundText) {
       try {
-        const r = await fetch(`${AI_URL}/similarity`, {
+        const r = await aiFetch(`${AI_URL}/similarity`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query_embedding: lostText, stored_embeddings: [foundText], top_k: 1 }),
         });
