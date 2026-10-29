@@ -47,3 +47,6 @@ credentials.json
 .tooling/
 
 .expo-export-check/
+
+.vercel
+.env*
