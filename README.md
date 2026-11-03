@@ -62,4 +62,4 @@ The root Vercel project builds the web admin and serves its Express API. The Pyt
 - API health: https://lost-found-admin-eta.vercel.app/api/health
 - AI service: https://lost-found-ai-sable.vercel.app/health (inference requires the private server key)
 
-Mobile preview and production profiles use the hosted API. Existing installations with a saved server address can set https://lost-found-admin-eta.vercel.app/api in their connection settings.
+Mobile preview and production profiles use the hosted API. Production builds ignore old saved development addresses. See [Android release notes](mobile/RELEASE.md) for standalone installation and updates. Push tested web/API fixes to `main` for the connected Vercel production workflow described in [deployment setup](docs/deployment.md).

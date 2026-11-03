@@ -15,7 +15,15 @@ Configure these values in the Vercel project environment, never in Git:
 - DEEPGRAM_API_KEY for speech transcription
 - AI_SERVER_URL and AI_SERVICE_KEY for the separate model service
 
-Use an account's actual password. The old universal development password is not accepted. Hosted API routes verify signed sessions and current account status; administrative actions require an administrator. Mobile password login also obtains its session from the API. Existing direct mobile Supabase operations continue to depend on the database's RLS policies; deploying the API does not replace or migrate those policies.
+Use an account's actual password. The old universal development password is not accepted. Hosted API routes verify signed sessions and current account status; administrative actions require an administrator. Mobile password login also obtains its session from the API. Mobile record operations use authenticated API routes with server-side ownership checks. Private database tables also have restricted RLS policies; deploying code does not apply database migrations. See `docs/secure-data-rollout.md` for the separate database rollout.
+
+## GitHub updates
+
+The release branch is `main` in `Wardjay45/Lost-and-found-system`. Connect that repository to the existing `lost-found-admin` Vercel project and select `main` as its production branch. Keep the project root at the repository root so the checked-in `vercel.json` builds both the admin and API.
+
+For future releases, run the relevant tests and the web build, commit the fixes, and push or merge into `main`. With the Git connection enabled, Vercel creates a production deployment automatically. Wait for Ready and verify the deployed commit before treating the update as live. Other branches normally create previews. Database migrations and the separate AI service deployment remain separate operations.
+
+The production URL stays https://lost-found-admin-eta.vercel.app. Compatible web/API updates at that address do not require reinstalling the mobile APK. Changes to bundled mobile code or its public API address require a new mobile build.
 
 ## AI project
 
@@ -27,7 +35,7 @@ The AI project uses the account's existing plan limits. Model startup, memory an
 
 ## Mobile builds
 
-Set EXPO_PUBLIC_API_URL to the hosted admin origin followed by /api, and EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to the configured public Google client ID. These public settings may be supplied through EAS environments. Provider API keys and service-role keys must remain on the server. Rebuild the app to change bundled EXPO_PUBLIC values; an existing installation can also change the server URL in its connection settings.
+Set EXPO_PUBLIC_API_URL to the hosted admin origin followed by /api, and EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to the configured public Google client ID. These public settings may be supplied through EAS environments. Provider API keys and service-role keys must remain on the server. Rebuild the app to change bundled EXPO_PUBLIC values; development builds can change the server URL in connection settings. Production builds use the bundled HTTPS address and ignore a previously saved development server address.
 
 ## Verification
 
