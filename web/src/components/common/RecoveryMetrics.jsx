@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { feedbackApi } from '../../services/api';
 import { DataRegion } from './UI';
 import AppIcon from './AppIcon';
+import useLiveRefresh from '../../hooks/useLiveRefresh';
 
 const hoursLabel = hours => hours === null ? '—' : hours < 24 ? hours.toFixed(1) + ' hours' : (hours / 24).toFixed(1) + ' days';
 
@@ -13,17 +14,17 @@ export default function RecoveryMetrics() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const load = useCallback(async () => {
-    setLoading(true); setError('');
-    try { setSummary(await feedbackApi.getSummary()); }
+  const load = useCallback(async ({ background = false } = {}) => {
+    if (!background) setLoading(true);
+    try { setSummary(await feedbackApi.getSummary()); setError(''); }
     catch (failure) { setError(failure.message); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useLiveRefresh(['feedback', 'item_recoveries'], load);
   return <section className="recovery-performance" aria-labelledby="recovery-performance-title">
     <header className="recovery-performance-header">
       <div><h2 id="recovery-performance-title">Verified Recovery Performance</h2><p>Confirmed item handovers and feedback from their owners.</p></div>
-      <button type="button" className="ui-button ui-button-secondary" onClick={load} disabled={loading}><AppIcon name="refresh" />Refresh metrics</button>
     </header>
     <DataRegion loading={loading} error={error} onRetry={load}>
       {summary && <>

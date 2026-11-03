@@ -14,7 +14,7 @@ test('hosted API requires current signed sessions and keeps student access separ
   const token = role => jwt.sign({ id: 7, role }, secret);
   const call = (path, method = 'GET', session = token(actor.role)) => fetch('http://127.0.0.1:' + server.address().port + path, { method, headers: { Authorization: 'Bearer ' + session } });
   assert.equal((await call('/users', 'GET', 'bad')).status, 401);
-  assert.equal((await call('/lost-items')).status, 200); assert.equal((await call('/qr-locations')).status, 200);
+  assert.equal((await call('/lost-items')).status, 403); assert.equal((await call('/mobile/data/lost_items')).status, 200); assert.equal((await call('/qr-locations')).status, 200);
   assert.equal((await call('/ai/match', 'POST')).status, 200); assert.equal((await call('/speech-to-text', 'POST')).status, 200);
   assert.equal((await call('/users')).status, 403); assert.equal((await call('/messages')).status, 403);
   assert.equal((await call('/ai/embed', 'POST')).status, 403); assert.equal((await call('/lost-items/11/status', 'PUT')).status, 403);

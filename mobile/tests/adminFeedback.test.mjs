@@ -14,7 +14,7 @@ test('recovery performance belongs only on Feedback while Analytics keeps report
   const feedback = readFileSync(new URL('../../web/src/pages/Feedback.jsx', import.meta.url), 'utf8');
   assert.doesNotMatch(analytics, /RecoveryMetrics/);
   assert.match(feedback, /<RecoveryMetrics\s*\/>/);
-  assert.match(analytics, /const forecast = useMemo/);
+  assert.match(analytics, /<PredictiveAnalytics/);
 });
 
 function harness(file, api) {
@@ -33,6 +33,7 @@ function harness(file, api) {
     }).code;
     const context = vm.createContext({ exports: {}, require(name) {
       if (name === 'react') return react;
+      if (name.includes('hooks/useLiveRefresh')) return { default: () => {}, __esModule: true };
       if (name.includes('services/api')) return { feedbackApi: api };
       if (name.endsWith('/UI') || name === './UI') return ui;
       if (name.includes('RecoveryMetrics')) return { default: 'RecoveryMetrics', __esModule: true };

@@ -1,6 +1,8 @@
+import { unclaimedReports } from '../../../shared/unclaimed.mjs';
 import AppIcon from '../components/common/AppIcon';
 import { PageHeader, DataRegion } from '../components/common/UI';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import useLiveRefresh from '../hooks/useLiveRefresh';
 import { foundItemsApi } from '../services/api';
 import { useAppSettings } from '../context/AppContext';
 import StatusBadge from '../components/common/StatusBadge';
@@ -15,25 +17,19 @@ export default function UnclaimedItems() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    foundItemsApi
+  const load = useCallback(async () => {
+    return foundItemsApi
       .getAll()
       .then((data) => {
-        const now = new Date();
-        const threshold = new Date(now.getTime() - unclaimedDays * 24 * 60 * 60 * 1000);
+        const unclaimed = unclaimedReports(Array.isArray(data) ? data : [], unclaimedDays);
 
-        const unclaimed = (Array.isArray(data) ? data : [])
-          .filter((item) => {
-            const itemDate = new Date(item.date_found || item.created_at);
-            return itemDate < threshold;
-          })
-          .sort((a, b) => new Date(b.date_found || b.created_at) - new Date(a.date_found || a.created_at));
-
-        setItems(unclaimed);
+        setItems(unclaimed); setPageError('');
       })
       .catch(err => setPageError(err.message || 'Unable to load this section.'))
       .finally(() => setLoading(false));
   }, [unclaimedDays]);
+  useEffect(() => { void load(); }, [load]);
+  useLiveRefresh('found_items', load);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return items;

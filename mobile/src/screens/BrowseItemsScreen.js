@@ -1,6 +1,7 @@
+import { useLiveRefresh } from '../context/LiveDataContext';
 import { TextInput, TouchableOpacity } from '../components/SpeechControls';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator, Image } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import supabase from '../config/supabase';
@@ -22,7 +23,7 @@ function normalizeItem(item) {
     location: item.location_found || 'Unknown',
     date: item.date_found || item.created_at,
     status: item.status || 'pending',
-    image: item.image_url || null,
+    image: item.image || item.image_url || null,
     itemId: item.item_id || null,
     finderName: item.finder_name || null,
     finderContact: item.finder_contact || null,
@@ -36,7 +37,6 @@ export default function BrowseItemsScreen({ navigation }) {
   const [search, setSearch] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [unclaimedDays, setUnclaimedDays] = useState(60);
 
@@ -75,7 +75,6 @@ export default function BrowseItemsScreen({ navigation }) {
       console.error('Fetch items error:', err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
@@ -83,10 +82,7 @@ export default function BrowseItemsScreen({ navigation }) {
     fetchItems();
   }, [fetchItems]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchItems();
-  };
+  useLiveRefresh(fetchItems, ['found_items', 'categories']);
 
   // Apply search filter only (no type tabs — everything is found items past threshold)
   let filtered = items;
@@ -147,7 +143,6 @@ export default function BrowseItemsScreen({ navigation }) {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#818cf8" />}
       >
         {error ? (
           <View style={styles.empty}>

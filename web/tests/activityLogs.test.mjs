@@ -51,6 +51,17 @@ test('JSON details without text remain readable and historical claims do not bec
   assert.equal(activityView(rows[0]).notes, 'Owner verified');
   assert.equal(activityView(rows[0]).timestamp, '2026-10-21T10:20:00.000Z');
   assert.equal(activityView({ action: 'update', details: '{broken', timestamp: 'bad' }).timestamp, null);
-  assert.equal(activityView({ action: 'update', details: '{broken' }).summary, '{broken');
+  assert.equal(activityView({ action: 'update', details: '{broken' }).summary, 'Record updated');
   assert.match(activityView({ action: 'custom event', details: '{"reason":"Reviewed"}' }).summary, /Reviewed/);
+});
+
+
+test('activity summaries never expose structured metadata or duplicate match text', () => {
+  const match = activityView({ action: 'match', details: JSON.stringify({ text: 'Verbose internal event', lost_item_id: 1, found_item_id: 2, lost_item_name: 'Blue bag', found_item_name: 'Bag', score: .96, image_score: .94, text_score: 1 }) });
+  assert.equal(match.summary, 'Lost: Blue bag → Found: Bag (96% similarity)');
+  for (const details of ['{"internal_id":123,"image_embedding":[1,2]}', '[1,2,3]', '{broken']) {
+    assert.equal(activityView({ action: 'update', details }).summary, 'Record updated');
+  }
+  assert.equal(activityView({ action: 'cancel', details: 'Cancelled duplicate report.' }).summary, 'Cancelled duplicate report.');
+  assert.equal(activityView({ action: 'update', details: { message: 'Report details updated.' } }).summary, 'Report details updated.');
 });

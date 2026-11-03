@@ -33,3 +33,16 @@ __pycache__/
 **/android/.cxx/
 **/android/app/.cxx/
 **/android/local.properties
+
+# Local test artifacts, model environments, archives and private release files
+.tooling/
+.expo-export-check/
+.venv/
+venv/
+model-cache/
+*.apk
+*.aab
+credentials.json
+*.jks
+*.keystore
+!mobile/android/app/debug.keystore

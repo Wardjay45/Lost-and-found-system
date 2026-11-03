@@ -1,3 +1,4 @@
+import { validateStatusChange } from '../services/reportStatus.js';
 import { backgroundTask } from '../services/backgroundTask.js';
 import { aiFetch } from '../services/aiClient.js';
 import { Router } from 'express';
@@ -8,10 +9,7 @@ import { requireReportLocation, parseLocationDetails } from '../services/reportL
 
 const router = Router();
 
-const logActivity = async (action, details, userName = 'Admin', role = 'admin') => {
-  try { await supabase.from('activity_logs').insert({ action, details, user_name: userName, role, timestamp: new Date().toISOString() }); }
-  catch (e) { console.error('Activity log error:', e.message); }
-};
+
 
 const AI_URL = process.env.AI_SERVER_URL || 'http://localhost:8000';
 
@@ -202,7 +200,7 @@ router.post('/upload', upload.single('image'), async (req, res) => {
       .select().single();
     if (error) throw error;
     backgroundTask(generateEmbeddings(data.id, 'found_items', imageUrl, description));
-    await logActivity('report', `Found item reported: ${itemId} — ${description}`, finder_name || 'Admin');
+
     res.status(201).json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -236,7 +234,7 @@ router.post('/', async (req, res) => {
       .select().single();
     if (error) throw error;
     backgroundTask(generateEmbeddings(data.id, 'found_items', imageUrl, description));
-    await logActivity('report', `Found item reported: ${itemId} — ${description}`, finder_name || 'Admin');
+
     res.status(201).json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -247,6 +245,11 @@ router.post('/', async (req, res) => {
 router.put('/:id/status', async (req, res) => {
   try {
     const { status, cancel_reason } = req.body;
+    const { data: current, error: currentError } = await supabase.from('found_items').select('id,status').eq('id', req.params.id).single();
+    if (currentError) throw currentError;
+    if (!current) return res.status(404).json({ error: 'Report not found.' });
+    validateStatusChange(current.status, status, cancel_reason);
+
     const updates = { status, last_updated: new Date().toISOString() };
     if (status === 'resolved' || status === 'claimed') {
       updates.resolved_date = new Date().toISOString();
@@ -258,15 +261,11 @@ router.put('/:id/status', async (req, res) => {
       .from('found_items')
       .update(updates)
       .eq('id', req.params.id)
+      .eq('status', current.status)
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
-    if (!data) return res.status(404).json({ error: 'Found item not found' });
-    const action = status === 'cancelled' ? 'cancel' : status === 'resolved' ? 'resolve' : status === 'claimed' ? 'claim' : 'update';
-    const logDetail = status === 'cancelled' && cancel_reason
-      ? `Found item ${data.item_id || req.params.id} cancelled. Reason: ${cancel_reason}`
-      : `Found item ${data.item_id || req.params.id} status changed to ${status}`;
-    await logActivity(action, logDetail);
+    if (!data) return res.status(409).json({ error: 'This report changed while saving. Reopen it and try again.' });
     res.json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -286,7 +285,7 @@ router.put('/:id', async (req, res) => {
     if (req.body.location_details !== undefined) updates.location_details = parseLocationDetails(req.body.location_details);
     if (condition !== undefined) updates.condition = condition;
     if (image !== undefined) updates.image = image;
-    if (status !== undefined) updates.status = status;
+    if (status !== undefined) return res.status(400).json({ error: 'Use the report status action or verified handover to change status.' });
     const { data, error } = await supabase
       .from('found_items')
       .update(updates)
@@ -295,7 +294,7 @@ router.put('/:id', async (req, res) => {
       .single();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Found item not found' });
-    await logActivity('update', `Found item ${req.params.id} updated`);
+
     res.json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -305,11 +304,12 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/found-items/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('found_items')
       .delete()
-      .eq('id', req.params.id);
+      .eq('id', req.params.id).select('id').maybeSingle();
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Report not found or already deleted.' });
     res.json({ message: 'Found item deleted successfully' });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });

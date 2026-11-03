@@ -30,7 +30,9 @@ export function screen(name, theme = 'contrast') {
   const context = vm.createContext({ exports: {}, console, setTimeout, clearTimeout, AbortController,
     fetch: async (url, options) => { requests.push({ url, ...options }); return { ok: true, json: async () => ({ matches: [{ id: 'a', description: 'Blue bag', status: 'active', score: .86, image_score: .85, text_score: .88 }] }) }; },
     require(name) {
-      if (name === 'react') return react;
+      if (name.includes('LiveDataContext')) return { useLiveRefresh() {} };
+    if (name.includes('KeyboardAwareForm')) return { default: 'ScrollView', __esModule: true };
+    if (name === 'react') return react;
       if (name === 'react-native') return { ...native, StyleSheet: { create: value => value }, Alert: { alert() {} } };
       if (name === 'expo-image-picker') return { launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ base64: 'AA==', mimeType: 'image/png' }] }) };
       if (name.includes('SpeechControls')) return { TextInput: 'TextInput', TouchableOpacity: 'TouchableOpacity', Switch: 'Switch' };

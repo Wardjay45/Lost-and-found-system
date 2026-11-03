@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { qrLocationsApi, lostItemsApi, foundItemsApi } from '../services/api';
 import { formatDate } from '../utils/formatters';
 import Modal from '../components/common/Modal';
+import useLiveRefresh from '../hooks/useLiveRefresh';
 
 // The deep link / URL that the mobile app will handle
 // When scanned, it opens the app and auto-fills the location
@@ -32,10 +33,10 @@ export default function QRLocations() {
     loadLocations();
   }, []);
 
-  const loadLocations = () => {
-    setLoading(true);
-    Promise.all([qrLocationsApi.getAll(), lostItemsApi.getAll(), foundItemsApi.getAll()]).then(([data, lost, found]) => {
-      setLocations(data);
+  const loadLocations = ({ background = false } = {}) => {
+    if (!background) setLoading(true);
+    return Promise.all([qrLocationsApi.getAll(), lostItemsApi.getAll(), foundItemsApi.getAll()]).then(([data, lost, found]) => {
+      setLocations(data); setPageError('');
       const counts = {};
       data.forEach(loc => {
         const sameLocation = (item, field) => (item[field] || item[field === 'location_lost' ? 'locationLost' : 'locationFound'] || '').trim().toLowerCase() === loc.name.trim().toLowerCase();
@@ -44,6 +45,7 @@ export default function QRLocations() {
       setReportCounts(counts);
     }).catch(err => setPageError(err.message || 'Unable to load this section.')).finally(() => setLoading(false));
   };
+  useLiveRefresh(['qr_locations', 'lost_items', 'found_items'], loadLocations);
 
   /* QR generation removed: locations are now reusable predefined options. */
   const generateQR = async (loc) => {

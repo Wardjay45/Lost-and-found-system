@@ -1,0 +1,86 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import { categoryFixture } from './helpers/categoriesFixture.mjs';
+import { createUsersRouter } from '../routes/users.js';
+import { createMobileDataRouter } from '../routes/mobileData.js';
+import { createProductionAccess } from '../services/productionAccess.js';
+import { auditMutations } from '../services/audit.js';
+
+test('private database tables deny anonymous access and conversation migration is repeatable without losing history', async t => {
+  const f = await categoryFixture(); t.after(f.close);
+  await f.db.exec(readFileSync(new URL('../add-recovery-feedback.sql', import.meta.url), 'utf8'));
+  await f.db.exec("INSERT INTO users(id,name,email,password,role,status) VALUES (1,'Campus One','one@example.invalid','fixture','student','active'); INSERT INTO conversations(name) VALUES ('Campus One');");
+  const sql = readFileSync(new URL('../secure-data-access.sql', import.meta.url), 'utf8');
+  await f.db.exec(sql); await f.db.exec(sql);
+  assert.equal((await f.db.query('SELECT user_id FROM conversations')).rows[0].user_id, 1);
+  for (const role of ['anon','authenticated']) {
+    for (const table of ['users','lost_items','found_items','matches','messages','conversations','activity_logs']) {
+      await assert.rejects(f.db.transaction(async tx => { await tx.exec('SET LOCAL ROLE ' + role); await tx.query('SELECT * FROM ' + table); }), /permission denied/);
+    }
+    await f.db.transaction(async tx => { await tx.exec('SET LOCAL ROLE ' + role); await tx.query('SELECT * FROM categories'); await tx.query('SELECT * FROM qr_locations'); });
+    await assert.rejects(f.db.transaction(async tx => { await tx.exec('SET LOCAL ROLE ' + role); await tx.query("INSERT INTO categories(name) VALUES ('Unauthorized')"); }), /permission denied/);
+  }
+  assert.equal((await f.db.query('SELECT count(*)::int AS count FROM conversations')).rows[0].count, 1);
+});
+
+test('authenticated account and mobile APIs enforce roles, ownership and server-derived identity against real isolated Postgres', async t => {
+  const f = await categoryFixture();
+  const sql = readFileSync(new URL('../secure-data-access.sql', import.meta.url), 'utf8');
+  await f.db.exec(sql);
+  await f.db.exec("INSERT INTO users(id,name,email,password,role,status) VALUES (1,'Campus One','one@example.invalid','fixture','student','active'),(2,'Campus Two','two@example.invalid','fixture','student','active'),(8,'Superadmin','super@example.invalid','fixture','superadmin','active'); INSERT INTO categories(id,name,icon) VALUES (10,'Bags','bag'); INSERT INTO qr_locations(id,name,is_active) VALUES (10,'Library',true); INSERT INTO lost_items(id,item_id,description,location_lost,reporter_id,status) VALUES (101,'L-OWN','Own report','Library',1,'active'),(102,'L-OTHER','Private report','Library',2,'active'); INSERT INTO found_items(id,item_id,description,location_found,finder_id,finder_name,status) VALUES (201,'F-PUBLIC','Public found item','Library',2,'Private reporter','active'),(202,'F-PRIVATE','Returned item','Library',2,'Private reporter','claimed');");
+  const secret = 'isolated-web-fixes-session';
+  const app = express(); app.use(express.json());
+  app.use('/api', createProductionAccess(f.writer, { jwtSecret: secret }), auditMutations(f.writer));
+  app.use('/api/users', createUsersRouter({ client: f.writer, jwtSecret: secret }));
+  app.use('/api/mobile/data', createMobileDataRouter({ client: f.writer, jwtSecret: secret }));
+  const server = app.listen(0,'127.0.0.1'); await new Promise(resolve => server.once('listening',resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await f.close(); });
+  const token = (id,role) => jwt.sign({id,role},secret);
+  const sessions = { user: token(1,'student'), other:token(2,'student'), admin:token(7,'admin'), super:token(8,'superadmin') };
+  const call = (path,method='GET',body,session=sessions.user) => fetch('http://127.0.0.1:'+server.address().port+'/api'+path,{method,headers:{'Content-Type':'application/json',...(session?{Authorization:'Bearer '+session}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
+  assert.equal((await call('/users','GET',undefined,'')).status,401);
+  assert.equal((await call('/users')).status,403);
+  assert.equal((await call('/lost-items')).status,403);
+  const profile=await (await call('/mobile/data/users?select=id,name,role')).json();
+  assert.deepEqual(profile,[{id:1,name:'Campus One',role:'student'}]);
+  assert.equal((await call('/mobile/data/users?select=password')).status,400);
+  assert.deepEqual(await (await call('/mobile/data/lost_items?id=eq.102')).json(),[]);
+  const publicFound=await (await call('/mobile/data/found_items?id=eq.201')).json();
+  assert.equal(publicFound.length,1); assert.equal('finder_name' in publicFound[0],false);
+  assert.deepEqual(await (await call('/mobile/data/found_items?id=eq.202')).json(),[]);
+  assert.equal((await call('/mobile/data/users?id=eq.1','PATCH',{role:'admin'})).status,400);
+  assert.equal((await call('/mobile/data/users?id=eq.2','PATCH',{phone:'wrong'})).status,403);
+  const reportResponse=await call('/mobile/data/lost_items','POST',{description:'New own bag',category_id:10,location_lost:'Library',reporter_id:2,reporter_name:'Forged',status:'claimed'});
+  assert.equal(reportResponse.status,201); const report=(await reportResponse.json())[0];
+  assert.equal(report.reporter_id,1);assert.equal(report.reporter_name,'Campus One');assert.equal(report.status,'active');
+  assert.equal((await call('/mobile/data/lost_items?id=eq.101','PATCH',{status:'claimed'})).status,403);
+  assert.equal((await call('/mobile/data/lost_items?id=eq.102','PATCH',{status:'cancelled',cancel_reason:'Not mine'})).status,404);
+  assert.equal((await call('/mobile/data/lost_items?id=eq.101','PATCH',{status:'cancelled',cancel_reason:'Duplicate report'})).status,200);
+  const ownConversationResponse=await call('/mobile/data/conversations','POST',{name:'Campus Two'});
+  assert.equal(ownConversationResponse.status,201); const own=(await ownConversationResponse.json())[0];
+  assert.equal(own.name,'Campus One');assert.equal(own.user_id,1);
+  const otherConversation=await (await call('/mobile/data/conversations','POST',{},sessions.other)).json();
+  assert.notEqual(own.id,otherConversation[0].id);
+  await f.db.exec("INSERT INTO users(id,name,email,password,role,status) VALUES(3,'Campus Two','three@example.invalid','fixture','student','active')");
+  const sameName = await call('/mobile/data/conversations','POST',{},token(3,'student'));
+  assert.equal(sameName.status,201);
+  const separate = (await sameName.json())[0];
+  assert.equal(separate.user_id,3);assert.notEqual(separate.id,otherConversation[0].id);
+  assert.equal((await call('/mobile/data/messages','POST',{conversation_id:otherConversation[0].id,text:'Wrong chat'})).status,403);
+  const message=await (await call('/mobile/data/messages','POST',{conversation_id:own.id,text:'Hello office',sender:'admin'})).json();
+  assert.equal(message[0].sender,'user');
+  assert.deepEqual(await (await call('/mobile/data/messages?conversation_id=eq.'+otherConversation[0].id)).json(),[]);
+  assert.equal((await call('/users/2/role','PUT',{role:'admin'},sessions.admin)).status,403);
+  assert.equal((await call('/users/7/status','PUT',{status:'archived'},sessions.admin)).status,403);
+  assert.equal((await call('/users/8/status','PUT',{status:'archived'},sessions.super)).status,403);
+  const promotion=await call('/users/2/role','PUT',{role:'admin'},sessions.super);
+  assert.equal(promotion.status,200); assert.equal((await promotion.json()).role,'admin');
+  assert.equal((await call('/mobile/data/users','GET',undefined,sessions.other)).status,403,'Old role sessions must stop working');
+  const logged=(await f.db.query("SELECT user_name,details FROM activity_logs WHERE details LIKE '%role: admin%'")).rows;
+  assert.equal(logged.length,1);assert.equal(logged[0].user_name,'Superadmin');
+  assert.equal((await call('/users/1/status','PUT',{status:'suspended'},sessions.admin)).status,200);
+  assert.equal((await call('/mobile/data/users')).status,403);
+});

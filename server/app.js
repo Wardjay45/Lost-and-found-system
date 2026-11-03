@@ -1,3 +1,6 @@
+import { createMobileChangesRouter } from './services/mobileChanges.js';
+import mobileDataRouter from './routes/mobileData.js';
+import { auditMutations } from './services/audit.js';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -13,6 +16,7 @@ import authRouter from './routes/auth.js';
 import googleAuthRouter from './routes/googleAuth.js';
 import recoveryFeedbackRouter from './routes/recoveryFeedback.js';
 import dashboardRouter from './routes/dashboard.js';
+import analyticsRouter from './routes/analytics.js';
 import messagesRouter from './routes/messages.js';
 import { createNotificationRouter } from './services/notifications.js';
 import activityLogsRouter from './routes/activityLogs.js';
@@ -29,7 +33,7 @@ dotenv.config({ path: join(__dirname, '.env') });
 
 const app = express();
 
-app.use(cors({ origin: '*', credentials: true }));
+app.use(cors({ origin: '*', credentials: true, exposedHeaders: ['X-Activity-Warning'] }));
 app.use(express.json({ limit: '10mb' }));
 
 // Routes
@@ -37,12 +41,16 @@ app.use('/api/auth', googleAuthRouter);
 app.use('/api/feedback', recoveryFeedbackRouter);
 app.use('/api/auth', authRouter);
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
-if (process.env.NODE_ENV === 'production' || process.env.VERCEL) app.use('/api', createProductionAccess(supabase));
+app.use('/api', createProductionAccess(supabase));
+app.use('/api', auditMutations(supabase));
+app.use('/api/mobile/data', mobileDataRouter);
+app.use('/api/mobile/changes', createMobileChangesRouter(supabase));
 app.use('/api/categories', categoriesRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/lost-items', lostItemsRouter);
 app.use('/api/found-items', foundItemsRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/analytics', analyticsRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/notifications', createNotificationRouter(supabase));
 app.use('/api/activity-logs', activityLogsRouter);

@@ -14,6 +14,7 @@ export function AuthProvider({ children }) {
     if (token) {
       authApi.me()
         .then(userData => {
+          if (!['admin', 'superadmin'].includes(userData.role)) throw new Error('Administrator access is required.');
           setUser(userData);
           setIsAuthenticated(true);
         })
@@ -29,6 +30,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     try {
       const result = await authApi.login(email, password);
+      if (!['admin', 'superadmin'].includes(result.user?.role)) return { success: false, error: 'Use an administrator account to access the web dashboard.' };
       localStorage.setItem('token', result.token);
       setUser(result.user);
       setIsAuthenticated(true);

@@ -56,6 +56,7 @@ function MainTabs() {
         screenListeners={({ route }) => ({ tabPress: () => announceNavigation(screenNames[route.name] || route.name) })}
         screenOptions={({ route }) => ({
           headerShown: false,
+          tabBarHideOnKeyboard: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon
               label={route.name}

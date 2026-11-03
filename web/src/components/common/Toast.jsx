@@ -15,7 +15,9 @@ export default function ToastContainer() {
   }, []);
   useEffect(() => {
     listeners.push(addToast); const pending = timers.current;
-    return () => { listeners = listeners.filter(fn => fn !== addToast); pending.forEach(clearTimeout); pending.clear(); };
+    const warn = event => showToast(event.detail, 'warning', 'Activity log');
+    window.addEventListener('lf-admin-warning', warn);
+    return () => { window.removeEventListener('lf-admin-warning', warn); listeners = listeners.filter(fn => fn !== addToast); pending.forEach(clearTimeout); pending.clear(); };
   }, [addToast]);
   return <div className="toast-stack">{toasts.map(toast => <div key={toast.id} className={`toast toast-${toast.type}`} role={toast.type === 'error' ? 'alert' : 'status'}>
     <AppIcon name={toast.type === 'success' ? 'success' : toast.type === 'error' ? 'error' : toast.type === 'info' ? 'info' : 'warning'} />

@@ -43,6 +43,8 @@ function moduleView(fetchLocations) {
   };
   const client = { from: () => ({ select: () => ({ eq: () => ({ order: fetchLocations }) }) }) };
   const context = vm.createContext({ exports: {}, require(name) {
+    if (name.includes('LiveDataContext')) return { useLiveRefresh() {} };
+    if (name.includes('KeyboardAwareForm')) return { default: 'ScrollView', __esModule: true };
     if (name === 'react') return react;
     if (name === 'react-native') return { View: 'View', Text: 'Text', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', StyleSheet: { create: value => value } };
     if (name === '@react-navigation/native') return { useFocusEffect: callback => { focus = callback; } };
@@ -117,7 +119,7 @@ test('refresh errors display a retry state and a later refresh recovers without 
   const state = view.hook();
   assert.equal(state.locationsLoading, false);
   assert.equal(state.locations.length, 0);
-  assert.match(state.locationsError, /Refresh/);
+  assert.match(state.locationsError, /Reconnecting automatically/);
   fail = false;
   await state.refreshLocations();
   assert.equal(view.hook().locations.length, 1);
@@ -142,14 +144,13 @@ test('out-of-order refreshes and requests completing after blur cannot overwrite
   assert.equal(view.hook().locations[0].name, 'New Hall');
 });
 
-test('dropdown shows approved options, selects a name, and exposes Refresh at larger text sizes', () => {
+test('dropdown shows approved options, selects a name, and updates automatically at larger text sizes', () => {
   const view = moduleView();
   let selected;
   let refreshes = 0;
   const props = { value: '', locations: [library, hall], loading: false, error: '', disabled: false, locked: false, onChange: value => { selected = value; }, onRefresh: () => { refreshes++; } };
   let rendered = view.picker(props);
-  nodes(rendered).find(node => node.props?.accessibilityLabel === 'Refresh locations').props.onPress();
-  assert.equal(refreshes, 1);
+  assert.equal(nodes(rendered).some(node => node.props?.accessibilityLabel === 'Refresh locations'), false);
   nodes(rendered).find(node => node.props?.accessibilityLabel === 'Select report location').props.onPress();
   rendered = view.picker(props);
   const options = nodes(rendered).filter(node => node.props?.accessibilityRole === 'radio');

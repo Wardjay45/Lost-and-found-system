@@ -23,7 +23,7 @@ def score_candidates(query_image, query_text, candidates, image_weight=.7, text_
         try:
             norm = math.sqrt(sum(float(v) ** 2 for v in stored)) + 1e-8
             result = sum(float(a) * float(b) / norm for a, b in zip(query, stored))
-            return result if math.isfinite(result) else 0.
+            return max(-1., min(1., result)) if math.isfinite(result) else 0.
         except (TypeError, ValueError, OverflowError):
             return 0.
 

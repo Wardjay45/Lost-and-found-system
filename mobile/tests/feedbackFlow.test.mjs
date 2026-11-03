@@ -27,6 +27,8 @@ function harness({ records = [returned], values = new Map(), onPost = async body
     babelrc: false, configFile: false, plugins: [require.resolve('@babel/plugin-transform-react-jsx'), require.resolve('@babel/plugin-transform-modules-commonjs')],
   }).code;
   const context = vm.createContext({ exports: {}, console, Set, require(name) {
+    if (name.includes('LiveDataContext')) return { useLiveRefresh() {} };
+    if (name.includes('KeyboardAwareForm')) return { default: 'ScrollView', __esModule: true };
     if (name === 'react') return react;
     if (name === 'react-native') return { View: 'View', Text: 'Text', ScrollView: 'ScrollView', SafeAreaView: 'SafeAreaView', ActivityIndicator: 'ActivityIndicator', StyleSheet: { create: value => value } };
     if (name === '@react-navigation/native') return { useFocusEffect: callback => react.useEffect(callback, [callback]) };

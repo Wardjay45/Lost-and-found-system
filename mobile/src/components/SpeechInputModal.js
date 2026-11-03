@@ -6,7 +6,7 @@ import {
   ActivityIndicator, Alert
 } from 'react-native';
 import { Audio } from 'expo-av';
-import { File } from 'expo-file-system/next';
+import { File } from 'expo-file-system';
 import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import FormIcon from './FormIcon';
 import { useAuth } from '../context/AuthContext';

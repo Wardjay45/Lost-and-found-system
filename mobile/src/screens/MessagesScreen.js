@@ -1,6 +1,7 @@
+import KeyboardViewport from '../components/KeyboardViewport';
 import { TextInput, TouchableOpacity } from '../components/SpeechControls';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
 import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import { useIsFocused } from '@react-navigation/native';
 import { useMessageBadge } from '../context/MessageBadgeContext';
@@ -20,6 +21,7 @@ export default function MessagesScreen() {
   const { messages, conversationId, loading, connected, refresh, markSeen, appActive } = useMessageBadge();
   const focused = useIsFocused();
   const [messageText, setMessageText] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [sending, setSending] = useState(false);
   const [inputHeight, setInputHeight] = useState(44);
   const flatListRef = useRef(null);
@@ -119,11 +121,7 @@ export default function MessagesScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, HC.container]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+    <KeyboardViewport style={[styles.container, HC.container]} onVisibilityChange={setKeyboardVisible}>
       {/* Chat Header */}
       <SafeAreaView style={styles.safeTop}>
         <View style={[styles.chatHeader, HC.card]}>
@@ -138,9 +136,7 @@ export default function MessagesScreen() {
               </Text>
             </View>
           </View>
-          <TouchableOpacity accessibilityLabel="Refresh messages" onPress={refresh} style={{ padding: 6 }}>
-            <Text style={{ fontSize: scaledFontSize(18) }}>🔄</Text>
-          </TouchableOpacity>
+
         </View>
       </SafeAreaView>
 
@@ -177,12 +173,13 @@ export default function MessagesScreen() {
       />
 
       {/* Input Bar */}
-      <View style={[styles.inputBar, HC.card, { paddingBottom: TAB_BAR_TOTAL }]}>
+      <View style={[styles.inputBar, HC.card, { paddingBottom: keyboardVisible ? 12 : TAB_BAR_TOTAL }]}>
         <TextInput
           style={[
             styles.input,
             { fontSize: scaledFontSize(15), height: Math.max(44, inputHeight) },
           ]}
+          accessibilityLabel="Message to the Lost and Found Office"
           value={messageText}
           onChangeText={setMessageText}
           onContentSizeChange={(e) => {
@@ -193,8 +190,8 @@ export default function MessagesScreen() {
           placeholderTextColor={themeColors.muted}
           editable={!sending}
           multiline
-          textAlignVertical="center"
-          scrollEnabled={false}
+          textAlignVertical="top"
+          scrollEnabled
           maxLength={500}
         />
         <TouchableOpacity
@@ -210,7 +207,7 @@ export default function MessagesScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardViewport>
   );
 }
 

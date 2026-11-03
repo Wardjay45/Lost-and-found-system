@@ -3,6 +3,7 @@ import AppIcon from '../components/common/AppIcon';
 import { DataRegion, PageHeader } from '../components/common/UI';
 import RecoveryMetrics from '../components/common/RecoveryMetrics';
 import { feedbackApi } from '../services/api';
+import useLiveRefresh from '../hooks/useLiveRefresh';
 
 const speeds = ['Under 24 hours', '1–3 days', '4–7 days', '8+ days'];
 
@@ -15,13 +16,14 @@ export default function Feedback() {
   const [speed, setSpeed] = useState('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('newest');
-  const load = useCallback(async () => {
-    setLoading(true); setError('');
-    try { setFeedback(await feedbackApi.getAll()); }
+  const load = useCallback(async ({ background = false } = {}) => {
+    if (!background) setLoading(true);
+    try { setFeedback(await feedbackApi.getAll()); setError(''); }
     catch (failure) { setError(failure.message); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useLiveRefresh(['feedback', 'item_recoveries'], load);
   const filtered = useMemo(() => feedback.filter(row =>
     (kind === 'all' || row.kind === kind) && (rating === 'all' || row.rating === Number(rating)) &&
     (speed === 'all' || row.kind === 'recovery' && row.speed === speed) &&
@@ -30,8 +32,7 @@ export default function Feedback() {
     sort === 'oldest' ? Date.parse(first.created_at) - Date.parse(second.created_at) : Date.parse(second.created_at) - Date.parse(first.created_at)),
   [feedback, kind, rating, speed, search, sort]);
   return <div className="page page-feedback">
-    <PageHeader title="Feedback" description="Read genuine student feedback. Recovery ratings are linked to confirmed item handovers."
-      actions={<button type="button" className="ui-button ui-button-secondary" onClick={load} disabled={loading}><AppIcon name="refresh" />Refresh feedback</button>} />
+    <PageHeader title="Feedback" description="Read genuine student feedback. Recovery ratings are linked to confirmed item handovers." />
     <RecoveryMetrics />
     <section className="ui-panel p-5 space-y-5" aria-label="Student feedback">
       <div><h2 className="font-semibold lf-text-primary">All Feedback</h2><p className="text-sm lf-text-muted mt-1">General suggestions stay separate from recovery performance. Admins cannot submit on students' behalf.</p></div>

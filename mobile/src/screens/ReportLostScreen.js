@@ -1,6 +1,9 @@
+import ReportSuccessSheet from '../components/ReportSuccessSheet';
+import KeyboardAwareForm from '../components/KeyboardAwareForm';
+import { useLiveRefresh } from '../context/LiveDataContext';
 import { TextInput, TouchableOpacity } from '../components/SpeechControls';
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Image, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, Image, Alert, ActivityIndicator, Keyboard } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRoute } from '@react-navigation/native';
 import SpeechInputModal, { MicButton } from '../components/SpeechInputModal';
@@ -15,6 +18,9 @@ import ReportLocationPicker, { useReportLocations } from '../components/ReportLo
 export default function ReportLostScreen({ navigation }) {
   const styles = useThemedStyles(baseStyles);
   const route = useRoute();
+  const formRef = useRef(null);
+  const descriptionRef = useRef(null);
+  const detailsRef = useRef(null);
   const { speak, highContrast, accessibilityStyles, scaledFontSize, themeColors } = useAccessibility();
   const { user } = useAuth();
   const [description, setDescription] = useState('');
@@ -25,8 +31,7 @@ export default function ReportLostScreen({ navigation }) {
   const [showCategory, setShowCategory] = useState(false);
   const [categories, setCategories] = useState([]);
 
-  useEffect(() => {
-    const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
       try {
         const { data, error } = await supabase.from('categories').select('*');
         if (error || !Array.isArray(data)) throw error || new Error('Categories unavailable');
@@ -45,9 +50,9 @@ export default function ReportLostScreen({ navigation }) {
           { id: null, name: 'Miscellaneous', icon: '📦' },
         ]);
       }
-    };
-    fetchCategories();
   }, []);
+  useEffect(() => { void fetchCategories(); }, [fetchCategories]);
+  useLiveRefresh(fetchCategories, ['categories']);
 
   const [speechModal, setSpeechModal] = useState({ visible: false, field: '', fieldName: '' });
   const [activeMic, setActiveMic] = useState('');
@@ -73,6 +78,7 @@ export default function ReportLostScreen({ navigation }) {
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [formError, setFormError] = useState('');
+  const [submitted, setSubmitted] = useState(false);
 
   const pickImage = async () => {
     try {
@@ -101,7 +107,7 @@ export default function ReportLostScreen({ navigation }) {
   const handleSubmit = async () => {
     if (submittingRef.current) return;
     if (locationsLoading || locationsError) {
-      const message = 'Refresh the approved locations before submitting your report.';
+      const message = 'Approved locations are syncing. Please wait a moment before submitting.';
       setFormError(message);
       speak(message);
       return;
@@ -117,6 +123,7 @@ export default function ReportLostScreen({ navigation }) {
 
     submittingRef.current = true;
     setSubmitting(true);
+    let reportSaved = false;
     try {
       await requireReportLocation(supabase, cleanLocation);
       const selectedCat = categories.find(c => c.name === cleanCategory);
@@ -127,10 +134,8 @@ export default function ReportLostScreen({ navigation }) {
           imageBase64 = image;
         } else {
           try {
-            const { default: FileSystem } = await import('expo-file-system');
-            const b64raw = await FileSystem.readAsStringAsync(image, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
+            const { File } = await import('expo-file-system');
+            const b64raw = await new File(image).base64();
             imageBase64 = `data:image/jpeg;base64,${b64raw}`;
           } catch (e) {
             throw new Error('Could not read the selected photo. Remove it or choose another photo.');
@@ -172,24 +177,24 @@ export default function ReportLostScreen({ navigation }) {
 
       console.log('Lost item inserted successfully, id:', data?.id);
 
-      speak(`Lost item reported. ${description} at ${location}. We'll notify you if a potential match is found.`);
-      Alert.alert('✅ Lost Item Report Submitted', `Your report has been filed successfully!\n\nItem: ${description}\nLocation: ${location}\nCategory: ${category}\n\nOur system will automatically match your lost item against items found on campus. If a potential match is detected, you will receive a notification in the Messages tab.\n\nPlease check Messages regularly for updates.`, [
-        { text: 'OK', onPress: () => { speak('Report submitted successfully. Check Messages for match updates.'); navigation.goBack(); } }
-      ]);
+      if (!data?.id) throw new Error('The server did not confirm your report. Please try again.');
+      reportSaved = true;
+      setSubmitted(true);
+      Keyboard.dismiss();
+      speak('Lost report submitted. Track match updates in My Reports and Messages.');
     } catch (err) {
       console.log('Submit error:', err?.message || err);
       speak('Failed to submit report. Please try again.');
       Alert.alert('Error', err.message || 'Failed to submit report. Please try again.');
     } finally {
-      submittingRef.current = false;
+      if (!reportSaved) submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
   return (
     <SafeAreaView style={[styles.container, HC.container]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
-        refreshControl={<RefreshControl refreshing={locationsLoading} onRefresh={refreshLocations} tintColor={themeColors.accent} colors={[themeColors.accent]} enabled={!submitting} />}>
+      <KeyboardAwareForm ref={formRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.headerSection, highContrast && HC.card]}>
           <View style={styles.headerIcon}><FormIcon name="search" size={28} color={themeColors.accent} /></View>
           <Text style={[styles.title, HC.text, { fontSize: scaledFontSize(24) }]}>Report Lost Item</Text>
@@ -210,18 +215,22 @@ export default function ReportLostScreen({ navigation }) {
         {image && <TouchableOpacity accessibilityLabel="Remove photo" accessibilityRole="button" style={[styles.removePhotoButton, HC.touch]} onPress={() => setImage(null)}><FormIcon name="x" size={16} /><Text style={[styles.removeImage, { fontSize: scaledFontSize(13) }]}>Remove photo</Text></TouchableOpacity>}
         <View style={styles.inputGroup}>
           <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Description *</Text>
-          <View style={styles.inputRow}><TextInput style={[styles.input, styles.inputFlex, { fontSize: scaledFontSize(15) }]} accessibilityLabel="Item description, required" placeholder="Describe the item (color, brand, features...)" placeholderTextColor={themeColors.muted} value={description} onChangeText={setDescription} multiline numberOfLines={3} textAlignVertical="top" /><MicButton onPress={() => openSpeech('description', 'Description')} active={activeMic === 'description'} /></View>
+          <View style={styles.inputRow}><TextInput ref={descriptionRef} onFocus={() => formRef.current?.focusInput(descriptionRef.current)} onSelectionChange={() => formRef.current?.revealFocusedInput()} style={[styles.input, styles.inputFlex, { fontSize: scaledFontSize(15), height: Math.max(112, scaledFontSize(15) * 4 + 32) }]} accessibilityLabel="Item description, required" placeholder="Describe the item (color, brand, features...)" placeholderTextColor={themeColors.muted} value={description} onChangeText={setDescription} multiline scrollEnabled numberOfLines={3} textAlignVertical="top" /><MicButton onPress={() => openSpeech('description', 'Description')} active={activeMic === 'description'} /></View>
           <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Category *</Text>
           <TouchableOpacity accessibilityLabel={`Category, ${category || "not selected"}, required`} accessibilityState={{ expanded: showCategory }} style={[styles.select, HC.touch]} onPress={() => { setShowCategory(!showCategory); if (!showCategory) speak('Select category'); }} activeOpacity={0.7}><Text style={[category ? styles.selectText : styles.placeholderText, { fontSize: scaledFontSize(15) }, category && HC.text]}>{category || 'Select category'}</Text><FormIcon name={showCategory ? 'chevron-up' : 'chevron-down'} size={18} /></TouchableOpacity>
           {showCategory && (<View style={styles.dropdown}>{categories.map(c => (<TouchableOpacity key={c.id ?? c.name} accessibilityRole="radio" accessibilityState={{ checked: category === c.name }} style={[styles.option, HC.touch]} onPress={() => { setCategory(c.name); setShowCategory(false); }}><Text style={[styles.optionText, HC.text, { fontSize: scaledFontSize(15) }]}>{c.name}</Text></TouchableOpacity>))}</View>)}
           <Text style={[styles.sectionHeading, HC.text, { fontSize: scaledFontSize(17) }]}>Location</Text>
           <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Location Lost *</Text>
           <ReportLocationPicker value={location} locations={locations} loading={locationsLoading} error={locationsError}
-            onChange={setLocation} onRefresh={refreshLocations} locked={locationLocked} disabled={submitting} />
+            onChange={setLocation} locked={locationLocked} disabled={submitting} />
           <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(13) }]}>Additional Info (optional)</Text>
           <View style={styles.inputRow}>
           <TextInput
-            style={[styles.input, styles.inputFlex, { fontSize: scaledFontSize(15), minHeight: 90 }]}
+            ref={detailsRef}
+            onFocus={() => formRef.current?.focusInput(detailsRef.current)}
+            onSelectionChange={() => formRef.current?.revealFocusedInput()}
+            scrollEnabled
+            style={[styles.input, styles.inputFlex, { fontSize: scaledFontSize(15), height: Math.max(112, scaledFontSize(15) * 4 + 32) }]}
             placeholder="Where exactly did you lose it? Add a nearby landmark or other detail."
             placeholderTextColor={themeColors.muted}
             value={locationDetails}
@@ -237,10 +246,11 @@ export default function ReportLostScreen({ navigation }) {
           <Text style={[styles.sectionHint, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Track updates in My Reports and Messages.</Text>
         </View>
         {!!formError && <View accessibilityRole="alert" style={styles.formErrorCard}><Text style={[styles.formErrorText, HC.text, { fontSize: scaledFontSize(13) }]}>{formError}</Text></View>}
-        <TouchableOpacity style={[styles.submitBtn, submitting && { opacity: 0.6 }, HC.touch]} onPress={handleSubmit} activeOpacity={0.8} disabled={submitting}>
+        <TouchableOpacity style={[styles.submitBtn, submitting && { opacity: 0.6 }, HC.touch]} onPress={handleSubmit} activeOpacity={0.8} disabled={submitting || submitted}>
           {submitting ? <View style={styles.submittingRow}><ActivityIndicator color="#fff" size="small" /><Text style={[styles.submitText, { fontSize: scaledFontSize(16) }]}>Submitting...</Text></View> : <Text style={[styles.submitText, { fontSize: scaledFontSize(16) }]}>Submit Report</Text>}
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareForm>
+      <ReportSuccessSheet visible={submitted} type="lost" onDone={() => navigation.goBack()} />
       <SpeechInputModal visible={speechModal.visible} fieldName={speechModal.fieldName} onClose={closeSpeech} onResult={handleSpeechResult} />
     </SafeAreaView>
   );

@@ -70,7 +70,7 @@ BEGIN
     IF recovered.lost_item_id = p_lost_id AND recovered.found_item_id = p_found_id THEN RETURN to_jsonb(recovered); END IF;
     RAISE EXCEPTION 'One of these items has already been returned in another handover.';
   END IF;
-  IF lost.reporter_id IS NULL OR lost.status NOT IN ('active', 'potential_match', 'matched') OR found_report.status NOT IN ('active', 'potential_match', 'matched') THEN
+  IF lost.reporter_id IS NULL OR lost.status NOT IN ('potential_match', 'matched') OR found_report.status NOT IN ('potential_match', 'matched') THEN
     RAISE EXCEPTION 'These reports are not eligible for a verified handover.';
   END IF;
   FOR entry IN SELECT activity.details AS payload FROM public.activity_logs AS activity WHERE activity.action = 'match' ORDER BY activity.timestamp DESC, activity.id DESC LOOP

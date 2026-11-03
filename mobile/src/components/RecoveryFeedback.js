@@ -1,3 +1,4 @@
+import { useLiveRefresh } from '../context/LiveDataContext';
 import React, { useCallback, useRef, useState } from 'react';
 import { View, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -36,6 +37,7 @@ export function useRecoveryFeedback() {
     refreshFeedback();
     return () => { request.current++; };
   }, [refreshFeedback]));
+  useLiveRefresh(refreshFeedback, ['item_recoveries', 'feedback']);
   const dismissPrompt = async () => {
     if (!state.prompt || state.owner !== user?.id) return;
     const id = state.prompt.id;

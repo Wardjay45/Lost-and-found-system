@@ -1,3 +1,4 @@
+import { useLiveSubscription } from './LiveDataContext';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -59,27 +60,17 @@ function AccountMessageBadge({ children, user }) {
     // Handle storage errors; the in-memory receipts still work for this session.
     writes.current.catch(() => {});
   }, [hydrated, snapshot.conversationId, storageKey]);
+  const live = useLiveSubscription(refresh, ['messages', 'conversations'], Boolean(user?.id));
   useEffect(() => {
     if (!user?.name) return;
     void refresh();
-    const timer = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 10000);
     const listener = AppState.addEventListener('change', state => {
       setAppActive(state === 'active');
       if (state === 'active') void refresh();
     });
-    const channel = supabase.channel('message-conversations:' + user.id)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: 'name=eq.' + user.name }, refresh)
-      .subscribe(status => { if (status === 'SUBSCRIBED') void refresh(); });
-    return () => { clearInterval(timer); listener.remove(); void supabase.removeChannel(channel); };
+    return () => listener.remove();
   }, [user?.id, user?.name, refresh]);
-  useEffect(() => {
-    if (snapshot.conversationId == null) return;
-    const channel = supabase.channel('message-badge:' + snapshot.conversationId)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: 'conversation_id=eq.' + snapshot.conversationId }, refresh)
-      .subscribe(status => { if (status === 'SUBSCRIBED') void refresh(); });
-    return () => { void supabase.removeChannel(channel); };
-  }, [snapshot.conversationId, refresh]);
   const unreadCount = hydrated ? unreadRows(incomingMessages(snapshot.messages, 'admin', snapshot.conversationId), seen).length : 0;
-  return <MessageBadgeContext.Provider value={{ ...snapshot, unreadCount, markSeen, refresh, loading, connected, appActive }}>{children}</MessageBadgeContext.Provider>;
+  return <MessageBadgeContext.Provider value={{ ...snapshot, unreadCount, markSeen, refresh, loading, connected, appActive, syncStatus: live.status }}>{children}</MessageBadgeContext.Provider>;
 }
 export function useMessageBadge() { return useContext(MessageBadgeContext); }

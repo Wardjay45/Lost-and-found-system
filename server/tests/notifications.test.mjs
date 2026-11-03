@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { createNotificationRouter, notificationSnapshot } from '../services/notifications.js';
+import { adminLiveTables } from '../../shared/adminLiveTables.mjs';
 const secret = 'isolated-notification-test-secret';
 function database() {
-  const state = { user: { role: 'admin', status: 'active' }, fail: false, callbacks: {}, removed: 0, subscriptions: 0,
+  let onRemoved;
+  const whenRemoved = new Promise(resolve => { onRemoved = resolve; });
+  const state = { user: { role: 'admin', status: 'active' }, fail: false, callbacks: {}, removed: 0, subscriptions: 0, whenRemoved,
     rows: { lost_items: [{ id: 1 }], found_items: [{ id: 2 }], messages: [{ id: 3, conversation_id: '7', sender: 'user' }, { id: 4, conversation_id: '7', sender: 'admin' }] } };
   const db = { from(table) {
     let filter;
@@ -20,7 +23,7 @@ function database() {
     };
   }, channel() { state.subscriptions++;
     return { on(_event, filter, callback) { state.callbacks[filter.table] = callback; return this; }, subscribe(callback) { callback('SUBSCRIBED'); return this; } };
-  }, async removeChannel() { state.removed++; } };
+  }, async removeChannel() { state.removed++; onRemoved(); } };
   return { db, state };
 }
 async function appFor(t) {
@@ -71,8 +74,14 @@ test('live stream forwards database changes and removes the channel after the br
   const event = new TextDecoder().decode(value);
   assert.match(event, /"table":"messages"/);
   assert.ok(!event.includes('private text'));
-  assert.deepEqual(Object.keys(state.callbacks).sort(), ['conversations', 'found_items', 'lost_items', 'messages']);
+  assert.deepEqual(Object.keys(state.callbacks).sort(), [...adminLiveTables].sort());
+  for (const table of ['activity_logs', 'qr_locations', 'categories']) {
+    state.callbacks[table]();
+    assert.match(new TextDecoder().decode((await reader.read()).value), new RegExp('"table":"' + table + '"'));
+  }
   controller.abort();
-  await new Promise(resolve => setTimeout(resolve, 30));
+  let timeout;
+  try { await Promise.race([state.whenRemoved, new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Disconnected stream did not release its subscription')), 2000); })]); }
+  finally { clearTimeout(timeout); }
   assert.equal(state.removed, 1);
 });

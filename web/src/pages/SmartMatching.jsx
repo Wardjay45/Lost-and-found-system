@@ -1,10 +1,12 @@
+import { sendMatchNotification } from '../services/matchNotification.mjs';
 import AppIcon from '../components/common/AppIcon';
-import { PageHeader, DataRegion } from '../components/common/UI';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { PageHeader, ErrorState, LoadingState } from '../components/common/UI';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import useLiveRefresh from '../hooks/useLiveRefresh';
 import Modal from '../components/common/Modal';
 import MatchComparison from '../components/common/MatchComparison';
 import ItemDescription from '../components/common/ItemDescription';
-import { categoriesApi, activityLogsApi, lostItemsApi, foundItemsApi } from '../services/api';
+import { categoriesApi, activityLogsApi } from '../services/api';
 import { recordPotentialMatch } from '../services/recordPotentialMatch.mjs';
 import { showToast } from '../components/common/Toast';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -26,35 +28,49 @@ export default function SmartMatching() {
   const [claiming, setClaiming] = useState(false);
   const [markingMatch, setMarkingMatch] = useState(null);
   const markingRef = useRef(false);
+  const loadingRef = useRef(false);
+  const reloadQueued = useRef(false);
+  const requestVersion = useRef(0);
+  const invalidateRequests = useCallback(() => { requestVersion.current++; reloadQueued.current = false; }, []);
 
-  useEffect(() => {
-    loadMatches();
-    categoriesApi.getAll().then(data => {
-      if (Array.isArray(data)) {
-        setCategories(data.filter(c => c.auto_tagging !== false));
-      }
-    }).catch(console.error);
-  }, []);
-
-  const loadMatches = async () => {
-    setLoading(true);
+  const loadMatches = useCallback(async ({ background = false } = {}) => {
+    if (loadingRef.current) { reloadQueued.current = true; return; }
+    loadingRef.current = true;
+    if (!background) setLoading(true);
     try {
-      const res = await authenticatedFetch(`${API_URL}/ai/auto-match`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!res.ok) throw new Error('Unable to load matching results. Please try again.');
-      const data = await res.json();
-      if (data.matches) {
+      do {
+        reloadQueued.current = false;
+        const version = ++requestVersion.current;
+        const res = await authenticatedFetch(`${API_URL}/ai/auto-match`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Unable to load matching results. Please try again.');
+        if (!Array.isArray(data.matches)) throw new Error('Matching returned an invalid response.');
+        if (version !== requestVersion.current) continue;
         setMatches(data.matches);
         setStats({ lostCount: data.lost_count, foundCount: data.found_count });
-      }
+        setPageError('');
+      } while (reloadQueued.current);
     } catch (err) {
       setPageError(err.message || 'Unable to load matching results.');
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
-  };
+  }, []);
+  const loadCategories = useCallback(async () => {
+    try {
+      const data = await categoriesApi.getAll();
+      setCategories(data.filter(c => c.auto_tagging !== false));
+    } catch (err) { setPageError(err.message); }
+  }, []);
+  useEffect(() => {
+    void loadMatches(); void loadCategories();
+    return invalidateRequests;
+  }, [loadMatches, loadCategories, invalidateRequests]);
+  useLiveRefresh(['lost_items', 'found_items', 'matches'], loadMatches);
+  useLiveRefresh('categories', loadCategories);
 
   const filteredMatches = useMemo(() => {
     return matches.filter(m => {
@@ -109,14 +125,9 @@ export default function SmartMatching() {
             <option value={ALL_CATEGORIES_OPTION}>All Categories</option>
             {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
-          <button type="button"
-            onClick={loadMatches}
-            disabled={loading}
-            className="ui-button ui-button-primary disabled:opacity-50 transition-colors"
-          >
-            <DataRegion loading={loading} error={pageError} onRetry={loadMatches}>{loading ? "Loading..." : "Refresh"}</DataRegion>
-          </button>
         </div></>} />
+      {pageError && <ErrorState message={pageError} onRetry={loadMatches} />}
+      {loading && <LoadingState label="Loading matching results..." />}
 
       {/* Adjustable Percentage Slider */}
       <div className="ui-panel p-5 mb-6">
@@ -317,8 +328,8 @@ export default function SmartMatching() {
                         if (markingRef.current) return;
                         markingRef.current = true; setMarkingMatch(match.id);
                         try {
-                          await recordPotentialMatch(match, { activityLogsApi, lostItemsApi, foundItemsApi });
-                          const scorePct = Math.round(match.score * 100);
+                          await recordPotentialMatch(match, { activityLogsApi });
+                          requestVersion.current++;
 
                           // 4. Send notification message to the lost item reporter
                           const reporterId = match.lost_item?.reporter_id;
@@ -335,36 +346,18 @@ export default function SmartMatching() {
                             } catch {}
                           }
 
-                          if (reporterName) {
-                            // Use the match notification template from Settings, or fallback to default
-                            let template;
-                            try {
-                              const raw = localStorage.getItem('lost-found-admin-settings');
-                              if (raw) {
-                                const parsed = JSON.parse(raw);
-                                template = parsed.matchTemplate;
-                              }
-                            } catch {}
-                            const notifyMsg = (template || 'Our system has found an item that may match your lost report ({similarity}% similarity). Please visit the Campus Lost and Found Office within three (3) days and bring a valid school ID. The administrator will verify ownership before the item is released.')
-                              .replace('{userName}', reporterName)
-                              .replace('{itemDescription}', match.lost_item?.description || 'your item')
-                              .replace('{similarity}', scorePct);
-                            await authenticatedFetch(`${API_URL}/messages`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                sender: 'admin',
-                                sender_name: reporterName,
-                                text: notifyMsg,
-                              }),
-                            });
-                          }
+                          let template;
+                          try { template = JSON.parse(localStorage.getItem('lost-found-admin-settings') || '{}').matchTemplate; } catch {}
+                          const delivery = await sendMatchNotification(match, { fetcher: authenticatedFetch, apiUrl: API_URL, template, reporterName });
+                          if (!delivery.delivered) showToast(delivery.warning, 'warning', 'Message not delivered');
 
                           // 5. Remove from Smart Matching list & show toast
                           setMatches(current => current.filter(m => m.lost_item?.id !== match.lost_item?.id && m.found_item?.id !== match.found_item?.id));
+                          void loadMatches({ background: true });
                           showToast('Go to Lost Items → filter by "Potential Match" → click View → complete Face-to-Face Verification.', 'success', 'Marked as Potential Match');
                         } catch (e) {
-                          showToast(`${e.message || 'Unable to record the decision.'} Some item changes may already be saved; refresh before retrying.`, 'error');
+                          showToast(e.message || 'Unable to record the decision.', 'error');
+                          void loadMatches({ background: true });
                         } finally { markingRef.current = false; setMarkingMatch(null); }
                       }}
                       className="ui-button ui-button-success flex-1"

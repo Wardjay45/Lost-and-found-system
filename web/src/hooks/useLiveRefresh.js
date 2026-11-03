@@ -1,15 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { notificationEvent } from '../services/liveNotifications.mjs';
+import { subscribeTableChanges } from '../services/liveRefresh.mjs';
 export default function useLiveRefresh(table, refresh) {
   const callback = useRef(refresh);
   callback.current = refresh;
+  const tableKey = JSON.stringify(Array.isArray(table) ? [...table].sort() : [table]);
   useEffect(() => {
-    const update = event => {
-      const changedTable = event.detail?.table;
-      const matches = changedTable === 'all' || (Array.isArray(table) ? table.includes(changedTable) : changedTable === table);
-      if (document.visibilityState === 'visible' && matches) callback.current();
-    };
-    window.addEventListener(notificationEvent, update);
-    return () => window.removeEventListener(notificationEvent, update);
-  }, [table]);
+    return subscribeTableChanges(JSON.parse(tableKey), options => callback.current(options));
+  }, [tableKey]);
 }

@@ -1,336 +1,151 @@
-import { forecastReports } from '../utils/forecast.mjs';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
 import { useAppSettings } from '../context/AppContext';
-import AppIcon from '../components/common/AppIcon';
-import { PageHeader, DataRegion } from '../components/common/UI';
-import { useState, useEffect, useMemo } from 'react';
+import useLiveRefresh from '../hooks/useLiveRefresh';
 import { dashboardApi, lostItemsApi, foundItemsApi, categoriesApi } from '../services/api';
-import { Bar, Line } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, Filler } from 'chart.js';
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+import { PageHeader, DataRegion, EmptyState } from '../components/common/UI';
+import StatCard from '../components/common/StatCard';
+import PredictiveAnalytics from '../components/analytics/PredictiveAnalytics';
+import AppIcon from '../components/common/AppIcon';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, Filler);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+const lostColor = '#8b83f0', foundColor = '#16a89a';
+const statuses = [['pending', 'Pending'], ['active', 'Active'], ['potential_match', 'Potential match'], ['claimed', 'Claimed'], ['cancelled', 'Cancelled']];
+
+function LocationHeatmap({ title, rows, kind }) {
+  const places = [...rows].sort((a, b) => b.count - a.count);
+  const max = Math.max(1, ...places.map(place => place.count));
+  return <section className="ui-panel analytics-descriptive-panel" data-location-kind={kind}>
+    <div className="section-header analytics-panel-heading"><div><h3><AppIcon name={kind === 'lost' ? 'search' : 'box'} />{title}</h3><p>{places.length ? `${places.length} ${places.length === 1 ? 'location' : 'locations'} · ${places.reduce((total, place) => total + place.count, 0)} reported items` : 'Locations from your recorded reports'}</p></div></div>
+    {places.length ? <>
+      <ul className="analytics-location-tiles" aria-label={title}>{places.map(place => <li key={place.location} style={{ '--tile-strength': `${8 + place.count / max * 28}%` }}>
+        <span className="analytics-tile-location">{place.location || 'Not recorded'}</span>
+        <strong>{place.count}</strong><span className="analytics-tile-unit">{place.count === 1 ? 'item' : 'items'} {kind}</span>
+      </li>)}</ul>
+      <div className="analytics-heatmap-legend" aria-hidden="true"><span>Fewer items</span>{[8, 15, 22, 29, 36].map(strength => <i key={strength} style={{ '--tile-strength': `${strength}%` }} />)}<span>More items</span></div>
+    </> : <EmptyState icon="location" title="No locations yet" description="Locations will appear as items are reported." />}
+  </section>;
+}
 
 export default function Analytics() {
   const { settings } = useAppSettings();
-  const chartText = settings.darkMode || settings.colorTheme === 'midnight' ? '#a2afc8' : '#64718b';
-  const chartGrid = settings.darkMode || settings.colorTheme === 'midnight' ? '#2c3750' : '#eef0f6';
-  const [pageError, setPageError] = useState('');
-  const [pageLoading, setPageLoading] = useState(true);
-  const [stats, setStats] = useState({});
-  const [lostItems, setLostItems] = useState([]);
-  const [foundItems, setFoundItems] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [heatmap, setHeatmap] = useState({ lost: [], found: [] });
+  const [pageError, setPageError] = useState(''), [pageLoading, setPageLoading] = useState(true);
+  const [stats, setStats] = useState({}), [lostItems, setLostItems] = useState([]), [foundItems, setFoundItems] = useState([]);
+  const [categories, setCategories] = useState([]), [heatmap, setHeatmap] = useState({ lost: [], found: [] });
   const [trendPeriod, setTrendPeriod] = useState('monthly');
-
-  useEffect(() => {
-    setPageLoading(true); setPageError('');
-    Promise.all([dashboardApi.getStats().then(setStats),
-lostItemsApi.getAll().then(setLostItems),
-foundItemsApi.getAll().then(setFoundItems),
-categoriesApi.getAll().then(setCategories),
-fetch(API_URL + '/dashboard/location-heatmap', { headers: { Authorization: 'Bearer ' + (localStorage.getItem('token') || '') } })
-      .then(res => { if (!res.ok) throw new Error('Unable to load location activity.'); return res.json(); })
-      .then(setHeatmap)
-      ]).catch(err => setPageError(err.message || 'Unable to load this section.')).finally(() => setPageLoading(false));
+  const requestVersion = useRef(0);
+  const invalidateRequests = useCallback(() => { requestVersion.current++; }, []);
+  const load = useCallback(async ({ background = false } = {}) => {
+    const version = ++requestVersion.current;
+    if (!background) setPageLoading(true);
+    try {
+      const [nextStats, lost, found, nextCategories, locations] = await Promise.all([
+        dashboardApi.getStats(), lostItemsApi.getAll(), foundItemsApi.getAll(), categoriesApi.getAll(),
+        fetch(API_URL + '/dashboard/location-heatmap', { headers: { Authorization: 'Bearer ' + (localStorage.getItem('token') || '') } })
+          .then(response => { if (!response.ok) throw new Error('Unable to load locations.'); return response.json(); }),
+      ]);
+      if (version !== requestVersion.current) return;
+      setStats(nextStats); setLostItems(lost); setFoundItems(found); setCategories(nextCategories); setHeatmap(locations); setPageError('');
+    } catch (error) { if (version === requestVersion.current) setPageError(error.message || 'Unable to load analytics.'); }
+    finally { if (version === requestVersion.current) setPageLoading(false); }
   }, []);
+  useEffect(() => { void load(); return invalidateRequests; }, [load, invalidateRequests]);
+  useLiveRefresh(['lost_items', 'found_items', 'matches', 'categories', 'users', 'activity_logs', 'qr_locations'], load);
 
-  const activeCategories = categories.filter(c => c.auto_tagging !== false);
-
-  // Compute item_count per category from lost + found items
-  const categoriesWithCounts = activeCategories.map(cat => {
-    const lostCount = lostItems.filter(item => item.category_name === cat.name).length;
-    const foundCount = foundItems.filter(item => item.category_name === cat.name).length;
-    return { ...cat, item_count: lostCount + foundCount };
-  });
-
-  const barData = {
-    labels: ['Pending', 'Active'],
-    datasets: [
-      { label: 'Lost Items', data: [stats.lostPending || 0, stats.lostActive || 0], backgroundColor: '#4f46e5' },
-      { label: 'Found Items', data: [foundItems.filter(item => item.status === 'pending').length, stats.foundActive || 0], backgroundColor: '#0ea5e9' },
-    ],
-  };
-
-  // Grouped bar chart: Lost vs Found per category
-  const categoryBarData = {
-    labels: categoriesWithCounts.map(c => c.name),
-    datasets: [
-      {
-        label: 'Lost Reports',
-        data: categoriesWithCounts.map(c => lostItems.filter(item => item.category_name === c.name).length),
-        backgroundColor: '#4f46e5',
-        borderRadius: 4,
-      },
-      {
-        label: 'Found Reports',
-        data: categoriesWithCounts.map(c => foundItems.filter(item => item.category_name === c.name).length),
-        backgroundColor: '#0ea5e9',
-        borderRadius: 4,
-      },
-    ],
-  };
-
-  const categoryBarOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'top', labels: { color: chartText } },
-      tooltip: {
-        callbacks: {
-          footer: (items) => {
-            const total = items.reduce((sum, item) => sum + (item.raw || 0), 0);
-            return `Total: ${total} items`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: chartText, maxRotation: 45, minRotation: 0 } },
-      y: { beginAtZero: true, grid: { color: chartGrid }, ticks: { stepSize: 1, color: chartText } },
-    },
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { labels: { color: chartText } } },
-    scales: { x: { grid: { display: false }, ticks: { color: chartText } }, y: { beginAtZero: true, grid: { color: chartGrid }, ticks: { color: chartText } } },
-  };
-
-  // GitHub-style contribution tile colors
-  const getLostTileColor = (count, max) => {
-    if (count === 0) return 'bg-gray-100 dark:bg-gray-700/40';
-    const pct = count / max;
-    if (pct >= 0.8) return 'bg-red-500 dark:bg-red-600';
-    if (pct >= 0.6) return 'bg-red-400 dark:bg-red-500';
-    if (pct >= 0.4) return 'bg-red-300 dark:bg-red-400/80';
-    if (pct >= 0.2) return 'bg-red-200 dark:bg-red-400/50';
-    return 'bg-red-100 dark:bg-red-400/30';
-  };
-
-  const getFoundTileColor = (count, max) => {
-    if (count === 0) return 'bg-gray-100 dark:bg-gray-700/40';
-    const pct = count / max;
-    if (pct >= 0.8) return 'bg-green-500 dark:bg-green-600';
-    if (pct >= 0.6) return 'bg-green-400 dark:bg-green-500';
-    if (pct >= 0.4) return 'bg-green-300 dark:bg-green-400/80';
-    if (pct >= 0.2) return 'bg-green-200 dark:bg-green-400/50';
-    return 'bg-green-100 dark:bg-green-400/30';
-  };
-
-  const lostMax = Math.max(1, ...heatmap.lost.map(h => h.count));
-  const foundMax = Math.max(1, ...heatmap.found.map(h => h.count));
-
-  const forecast = useMemo(() => forecastReports(lostItems, foundItems), [lostItems, foundItems]);
-
-  const forecastData = {
-    labels: [...forecast.months.map(m => m.label), ...(forecast.next ? [forecast.targetLabel] : [])],
-    datasets: [
-      { label: 'Lost reports', data: [...forecast.months.map(m => m.lost), ...(forecast.next ? [forecast.next.lost] : [])], borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,.10)', tension: .35, fill: true, pointRadius: 3 },
-      { label: 'Found reports', data: [...forecast.months.map(m => m.found), ...(forecast.next ? [forecast.next.found] : [])], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.08)', tension: .35, fill: true, pointRadius: 3 },
-    ],
-  };
-  const forecastOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { color: chartText } }, tooltip: { callbacks: { footer: (items) => forecast.next && items[0]?.dataIndex === forecast.months.length ? 'Forecast estimate' : 'Historical reports' } } }, scales: { x: { grid: { display: false }, ticks: { color: chartText } }, y: { beginAtZero: true, grid: { color: chartGrid }, ticks: { color: chartText, stepSize: 1 } } } };
-
-  const historicalTrend = useMemo(() => {
-    const now = new Date();
-    const count = trendPeriod === 'monthly' ? 6 : 8;
-    const buckets = Array.from({ length: count }, (_, i) => {
-      const d = new Date(now);
-      if (trendPeriod === 'monthly') d.setMonth(now.getMonth() - count + 1 + i, 1);
-      else d.setDate(now.getDate() - (count - 1 - i) * 7);
-      return { date: d, lost: 0, found: 0 };
+  const historicalData = useMemo(() => {
+    const now = new Date(), monthly = trendPeriod === 'monthly', count = monthly ? 6 : 8;
+    const buckets = Array.from({ length: count }, (_, index) => {
+      const date = new Date(now); date.setHours(0, 0, 0, 0);
+      if (monthly) date.setMonth(now.getMonth() - count + 1 + index, 1);
+      else date.setDate(now.getDate() + 1 - (count - index) * 7);
+      return { date, lost: 0, found: 0 };
     });
-    const add = (items, key, dateField) => items.forEach(item => {
-      const d = new Date(item[dateField] || item.created_at);
-      if (Number.isNaN(d.getTime())) return;
-      const bucket = buckets.find(b => trendPeriod === 'monthly'
-        ? b.date.getFullYear() === d.getFullYear() && b.date.getMonth() === d.getMonth()
-        : d >= b.date && d < new Date(b.date.getTime() + 7 * 86400000));
-      if (bucket) bucket[key] += 1;
+    const add = (items, key, field) => items.forEach(item => {
+      const date = new Date(item[field]);
+      if (!Number.isFinite(date.getTime())) return;
+      const bucket = buckets.find(value => monthly
+        ? value.date.getFullYear() === date.getFullYear() && value.date.getMonth() === date.getMonth()
+        : date >= value.date && date < new Date(value.date.getTime() + 7 * 86400000));
+      if (bucket) bucket[key]++;
     });
     add(lostItems, 'lost', 'date_reported'); add(foundItems, 'found', 'date_found');
-    return { labels: buckets.map(b => trendPeriod === 'monthly' ? b.date.toLocaleString('en', { month: 'short' }) : `${b.date.toLocaleString('en', { month: 'short' })} ${b.date.getDate()}`), lost: buckets.map(b => b.lost), found: buckets.map(b => b.found) };
+    return {
+      labels: buckets.map(bucket => bucket.date.toLocaleDateString('en', monthly ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' })),
+      datasets: [
+        { label: 'Lost', data: buckets.map(bucket => bucket.lost), backgroundColor: lostColor, borderRadius: 4 },
+        { label: 'Found', data: buckets.map(bucket => bucket.found), backgroundColor: foundColor, borderRadius: 4 },
+      ],
+    };
   }, [lostItems, foundItems, trendPeriod]);
-
-  const historicalData = { labels: historicalTrend.labels, datasets: [
-    { label: 'Lost reports', data: historicalTrend.lost, backgroundColor: '#4f46e5', borderRadius: 5 },
-    { label: 'Found reports', data: historicalTrend.found, backgroundColor: '#10b981', borderRadius: 5 },
+  const activeCategories = categories.filter(category => category.auto_tagging !== false).map(category => ({
+    name: category.name,
+    lost: lostItems.filter(item => item.category_name === category.name).length,
+    found: foundItems.filter(item => item.category_name === category.name).length,
+  }));
+  const categoryData = { labels: activeCategories.map(category => category.name), datasets: [
+    { label: 'Lost', data: activeCategories.map(category => category.lost), backgroundColor: lostColor, borderRadius: 4 },
+    { label: 'Found', data: activeCategories.map(category => category.found), backgroundColor: foundColor, borderRadius: 4 },
   ] };
+  const shownStatuses = [...statuses, ...([...lostItems, ...foundItems].some(item => item.status === 'resolved') ? [['resolved', 'Resolved']] : [])];
+  const statusData = { labels: shownStatuses.map(([, label]) => label.includes(' ') ? label.split(' ') : label), datasets: [
+    { label: 'Lost', data: shownStatuses.map(([status]) => lostItems.filter(item => item.status === status).length), backgroundColor: lostColor, borderRadius: 4 },
+    { label: 'Found', data: shownStatuses.map(([status]) => foundItems.filter(item => item.status === status).length), backgroundColor: foundColor, borderRadius: 4 },
+  ] };
+  const dark = settings.darkMode || settings.colorTheme === 'midnight';
+  const text = settings.highContrast ? (dark ? '#ffffff' : '#111827') : dark ? '#b8c5dc' : '#526079';
+  const grid = dark ? '#303d58' : '#e8edf5';
+  const options = {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { position: 'top', labels: { color: text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 8, padding: 16 } } },
+    scales: { x: { grid: { display: false }, ticks: { color: text, maxRotation: 35 } }, y: { beginAtZero: true, grid: { color: grid }, ticks: { color: text, precision: 0 } } },
+  };
+  const categoryOptions = { ...options, scales: { ...options.scales, x: { ...options.scales.x, ticks: { color: text, autoSkip: false, maxRotation: 35, minRotation: 0 } } } };
 
-  return (
-    <div className="page page-analytics">
-      <PageHeader title="Analytics" description={"Understand reporting patterns and plan for what comes next."} />
-<DataRegion loading={pageLoading} error={pageError}>
-
-      {/* Predictive Analytics */}
-      <section className="ui-panel mb-6 p-6">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
-          <div>
-            <div className="flex items-center gap-2 mb-2"><span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">PREDICTIVE ANALYTICS</span><span className="text-xs text-gray-500 dark:text-gray-400">Trend estimate</span></div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Plan ahead with next-month reporting forecasts</h2>
-            <p className="mt-1 max-w-xl text-sm text-gray-500 dark:text-gray-400">A linear trend uses three to six complete months to estimate next-month report volume. The current and first recorded months are excluded.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 min-w-[250px]">
-            <div className="rounded-xl bg-indigo-50 p-4 dark:bg-indigo-900/20"><p className="text-xs text-indigo-600 dark:text-indigo-300">Expected lost</p><p className="mt-1 text-2xl font-bold text-indigo-700 dark:text-indigo-200">{forecast.next?.lost ?? '—'}</p><p className="text-xs text-gray-500 dark:text-gray-400">{forecast.targetLabel} estimate</p></div>
-            <div className="rounded-xl bg-emerald-50 p-4 dark:bg-emerald-900/20"><p className="text-xs text-emerald-600 dark:text-emerald-300">Expected found</p><p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-200">{forecast.next?.found ?? '—'}</p><p className="text-xs text-gray-500 dark:text-gray-400">{forecast.targetLabel} estimate</p></div>
-          </div>
-        </div>
-        {!forecast.next && <p role="status" className="mt-4 rounded-xl border border-[var(--lf-30-border)] p-4 lf-text-primary"><strong>Insufficient reporting history</strong><br />{forecast.completeMonths} of 3 required complete months available. No prediction is shown yet.</p>}
-        <div className="mt-6 h-64 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40"><Line data={forecastData} options={forecastOptions} /></div>
-        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">Estimates assume reporting coverage since the earliest recorded activity. Months without reports count as zero within that period. Dates use campus time (UTC+8).</p>
-        <p className="mt-2 text-sm lf-text-muted">{forecast.backtest ? `Historical backtest: lost MAE ${forecast.backtest.lostMae.toFixed(2)}, found MAE ${forecast.backtest.foundMae.toFixed(2)} reports across ${forecast.backtest.months} evaluated months. Each prediction uses the same two-month horizon and only earlier months.` : 'Backtesting needs at least five complete months. Forecast error is not available yet.'}</p>
-      </section>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {[['Total reports', (stats.totalLostItems || 0) + (stats.totalFoundItems || 0), 'text-indigo-600', 'bg-indigo-100 dark:bg-indigo-900/30', 'chart'], ['Lost reports', stats.totalLostItems || 0, 'text-indigo-600', 'bg-indigo-100 dark:bg-indigo-900/30', 'search'], ['Found reports', stats.totalFoundItems || 0, 'text-emerald-600', 'bg-emerald-100 dark:bg-emerald-900/30', 'box'], ['Match rate', `${stats.totalLostItems ? Math.round(((stats.totalMatches || 0) / stats.totalLostItems) * 100) : 0}%`, 'text-amber-600', 'bg-amber-100 dark:bg-amber-900/30', 'success']].map(([label, value, color, iconBg, icon]) => <div key={label} className="ui-panel flex items-center justify-between p-4"><div><p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</p><p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p></div><div className={`flex h-11 w-11 items-center justify-center rounded-lg text-2xl font-bold ${iconBg} ${color}`}><AppIcon name={icon} /></div></div>)}
-      </div>
-
-      <section className="ui-panel mb-6 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <div><h2 className="font-semibold text-gray-900 dark:text-white">Historical reporting trends</h2><p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Actual report activity used to support the forecast</p></div>
-          <div className="flex rounded-lg bg-gray-100 p-1 dark:bg-gray-700"><button type="button" onClick={() => setTrendPeriod('monthly')} className={`ui-button rounded-md px-3 py-1.5 text-xs font-medium ${trendPeriod === 'monthly' ? 'bg-white text-indigo-700 shadow-sm dark:bg-gray-600 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-300'}`}>Monthly</button><button type="button" onClick={() => setTrendPeriod('weekly')} className={`ui-button rounded-md px-3 py-1.5 text-xs font-medium ${trendPeriod === 'weekly' ? 'bg-white text-indigo-700 shadow-sm dark:bg-gray-600 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-300'}`}>Weekly</button></div>
-        </div>
-        <div className="h-64"><Bar data={historicalData} options={chartOptions} /></div>
-      </section>
-
-      {/* Report overview */}
-      <div className="flex items-center gap-3 mb-3"><div className="h-6 w-1 rounded-full bg-indigo-600" /><div><h2 className="text-lg font-bold text-gray-900 dark:text-white">Report overview</h2><p className="text-xs text-gray-500 dark:text-gray-400">Current workload across the lost-and-found system</p></div></div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="ui-panel p-5">
-          <div className="flex items-center justify-between mb-4"><div><h3 className="font-semibold text-gray-900 dark:text-white">Items by status</h3><p className="text-xs text-gray-500 dark:text-gray-400 mt-1">How reports are moving through the workflow</p></div><span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">Live totals</span></div>
-          <div className="h-72">
-            <Bar data={barData} options={chartOptions} />
-          </div>
-        </div>
-        <div className="ui-panel p-5">
-          <div className="mb-4"><h3 className="font-semibold text-gray-900 dark:text-white">Items by category</h3><p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Most frequently reported item groups <span className="text-gray-400">(active categories only)</span></p></div>
-          <div className="h-72">
-            {categoriesWithCounts.length > 0 && categoriesWithCounts.some(c => c.item_count > 0) ? (
-              <Bar data={categoryBarData} options={categoryBarOptions} />
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                {categoriesWithCounts.length === 0 ? 'No active categories' : 'No items assigned to categories yet'}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* System totals */}
-      <div className="flex items-center gap-3 mb-3"><div className="h-6 w-1 rounded-full bg-emerald-500" /><div><h2 className="text-lg font-bold text-gray-900 dark:text-white">System totals</h2><p className="text-xs text-gray-500 dark:text-gray-400">A quick snapshot of the data behind your reports</p></div></div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="ui-panel p-4">
-          <p className="text-xs text-gray-500">Claimed lost</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.lostClaimed || 0}</p>
-        </div>
-        <div className="ui-panel p-4">
-          <p className="text-xs text-gray-500">Claimed found</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.foundClaimed || 0}</p>
-        </div>
-        <div className="ui-panel p-4">
-          <p className="text-xs text-gray-500">Registered users</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalUsers || 0}</p>
-        </div>
-        <div className="ui-panel p-4">
-          <p className="text-xs text-gray-500">Active categories</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{categoriesWithCounts.length}</p>
-        </div>
-      </div>
-
-      {/* Location intelligence */}
-      <div className="flex items-center gap-3 mb-3"><div className="h-6 w-1 rounded-full bg-amber-500" /><div><h2 className="text-lg font-bold text-gray-900 dark:text-white">Location intelligence</h2><p className="text-xs text-gray-500 dark:text-gray-400">Identify places that need attention or stronger recovery coverage</p></div></div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Lost Locations */}
-        <div className="ui-panel p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white"><AppIcon name="search" /> Where Items Are Lost</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                {heatmap.lost.length > 0 ? `${heatmap.lost.length} locations, ${heatmap.lost.reduce((s, h) => s + h.count, 0)} total` : 'No data yet'}
-              </p>
-            </div>
-            {/* Legend */}
-            <div className="flex items-center gap-1 text-[10px] text-gray-400">
-              <span>Less</span>
-              <div className="w-3 h-3 rounded-sm bg-red-100 dark:bg-red-400/30" />
-              <div className="w-3 h-3 rounded-sm bg-red-200 dark:bg-red-400/50" />
-              <div className="w-3 h-3 rounded-sm bg-red-300 dark:bg-red-400/80" />
-              <div className="w-3 h-3 rounded-sm bg-red-400 dark:bg-red-500" />
-              <div className="w-3 h-3 rounded-sm bg-red-500 dark:bg-red-600" />
-              <span>More</span>
-            </div>
-          </div>
-          {heatmap.lost.length === 0 ? (
-            <div className="text-center py-10 text-gray-400 text-sm ui-empty">No lost items reported yet</div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {heatmap.lost.map((item, i) => (
-                <div
-                  key={i}
-                  className={`relative group ${getLostTileColor(item.count, lostMax)} rounded-lg px-3 py-2.5 min-w-[80px] text-center cursor-default transition-transform hover:scale-105 hover:z-10`}
-                >
-                  <span className="text-xs font-semibold text-gray-800 dark:text-white block truncate max-w-[140px]">
-                    {item.location}
-                  </span>
-                  <span className="text-[10px] text-gray-600 dark:text-gray-300">{item.count}</span>
-                  {/* Tooltip on hover */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                    {item.location}: {item.count} item{item.count !== 1 ? 's' : ''} lost
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-gray-900 rotate-45" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Found Locations */}
-        <div className="ui-panel p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white"><AppIcon name="box" /> Where Items Are Found</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                {heatmap.found.length > 0 ? `${heatmap.found.length} locations, ${heatmap.found.reduce((s, h) => s + h.count, 0)} total` : 'No data yet'}
-              </p>
-            </div>
-            {/* Legend */}
-            <div className="flex items-center gap-1 text-[10px] text-gray-400">
-              <span>Less</span>
-              <div className="w-3 h-3 rounded-sm bg-green-100 dark:bg-green-400/30" />
-              <div className="w-3 h-3 rounded-sm bg-green-200 dark:bg-green-400/50" />
-              <div className="w-3 h-3 rounded-sm bg-green-300 dark:bg-green-400/80" />
-              <div className="w-3 h-3 rounded-sm bg-green-400 dark:bg-green-500" />
-              <div className="w-3 h-3 rounded-sm bg-green-500 dark:bg-green-600" />
-              <span>More</span>
-            </div>
-          </div>
-          {heatmap.found.length === 0 ? (
-            <div className="text-center py-10 text-gray-400 text-sm ui-empty">No found items reported yet</div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {heatmap.found.map((item, i) => (
-                <div
-                  key={i}
-                  className={`relative group ${getFoundTileColor(item.count, foundMax)} rounded-lg px-3 py-2.5 min-w-[80px] text-center cursor-default transition-transform hover:scale-105 hover:z-10`}
-                >
-                  <span className="text-xs font-semibold text-gray-800 dark:text-white block truncate max-w-[140px]">
-                    {item.location}
-                  </span>
-                  <span className="text-[10px] text-gray-600 dark:text-gray-300">{item.count}</span>
-                  {/* Tooltip on hover */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                    {item.location}: {item.count} item{item.count !== 1 ? 's' : ''} found
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-gray-900 rotate-45" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+  return <div className="page page-analytics">
+    <PageHeader title="Analytics" description="Your lost and found reports at a glance." />
+    <DataRegion loading={pageLoading} error={pageError} onRetry={load}>
+      <div className="metric-grid">
+        <StatCard title="Lost reports" value={stats.totalLostItems || 0} icon="search" />
+        <StatCard title="Found reports" value={stats.totalFoundItems || 0} icon="box" />
+        <StatCard title="Potential matches" value={stats.lostPotentialMatch || 0} icon="matching" color="yellow" />
+        <StatCard title="Claimed items" value={stats.lostClaimed || 0} icon="success" color="green" />
       </div>
     </DataRegion>
-</div>
-  );
+    <PredictiveAnalytics />
+    {!pageLoading && !pageError && <section className="analytics-descriptive" aria-labelledby="descriptive-analytics-title">
+      <header className="analytics-section-heading"><span><AppIcon name="chart" /></span><div><h2 id="descriptive-analytics-title">Descriptive analytics</h2><p>A summary of reports already recorded in your system.</p></div></header>
+      <section className="ui-panel analytics-descriptive-panel analytics-history-panel">
+          <div className="section-header analytics-panel-heading"><div><h3>Historical reporting trends</h3><p>Compare lost and found reports over time</p></div>
+            <div className="segmented-control" role="group" aria-label="Report period">{['monthly', 'weekly'].map(period => <button type="button" key={period} aria-pressed={trendPeriod === period} onClick={() => setTrendPeriod(period)}>{period === 'monthly' ? 'Monthly' : 'Weekly'}</button>)}</div>
+          </div>
+          <div className="analytics-chart analytics-history-chart"><Bar data={historicalData} options={options} role="img" aria-label={`${trendPeriod === 'monthly' ? 'Monthly' : 'Weekly'} lost and found reports recorded in your system`} /></div>
+      </section>
+
+      <div className="analytics-subheading"><h3>Report overview</h3><span>Current item status and categories</span></div>
+      <div className="analytics-grid">
+        <section className="ui-panel analytics-descriptive-panel"><div className="section-header analytics-panel-heading"><div><h4>Items by status</h4><p>The current status of recorded reports</p></div></div>
+          {lostItems.length || foundItems.length ? <div className="analytics-chart"><Bar data={statusData} options={options} role="img" aria-label="Lost and found reports by current status" /></div> : <EmptyState icon="box" title="No reports yet" description="Report status will appear here when items are added." />}
+        </section>
+        <section className="ui-panel analytics-descriptive-panel"><div className="section-header analytics-panel-heading"><div><h4>Items by category</h4><p>Lost and found reports in active categories</p></div></div>
+          {activeCategories.some(category => category.lost + category.found > 0) ? <div className="analytics-category-scroll" role="region" aria-label="Category chart; scroll to see all categories" tabIndex={0}><div className="analytics-chart" style={{ minWidth: `${Math.max(300, activeCategories.length * 85)}px` }}><Bar data={categoryData} options={categoryOptions} role="img" aria-label="Lost and found report counts by category" /></div></div> : <EmptyState icon="tag" title="No category activity yet" description="Reported items will appear here by category." />}
+        </section>
+      </div>
+
+      <div className="analytics-subheading"><h3>System totals</h3><span>Recorded recoveries and account totals</span></div>
+      <dl className="analytics-system-totals">{[
+        ['Claimed lost reports', stats.lostClaimed || 0, 'search'],
+        ['Claimed found reports', stats.foundClaimed || 0, 'box'],
+        ['Registered users', stats.totalUsers || 0, 'users'],
+        ['Active categories', activeCategories.length, 'tag'],
+      ].map(([label, value, icon]) => <div className="ui-panel" key={label}><dt><AppIcon name={icon} />{label}</dt><dd>{value}</dd></div>)}</dl>
+
+      <div className="analytics-subheading"><h3>Location intelligence</h3><span>See where lost and found items are reported</span></div>
+      <div className="analytics-grid">
+        <LocationHeatmap title="Where items are lost" rows={heatmap.lost} kind="lost" />
+        <LocationHeatmap title="Where items are found" rows={heatmap.found} kind="found" />
+      </div>
+    </section>}
+  </div>;
 }

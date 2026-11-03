@@ -1,18 +1,19 @@
 import { useState } from 'react';
-import { lostItemsApi, foundItemsApi } from '../../services/api';
+import { activityLogsApi } from '../../services/api';
+import { showToast } from './Toast';
 import MatchDetails from './MatchDetails';
 import FTFVerificationForm from './FTFVerificationForm';
 
-export default function PotentialMatchReview({ item, table, onComplete, onCancel }) {
+export default function PotentialMatchReview({ item, table, onComplete }) {
   const [match, setMatch] = useState(null);
   const sourceId = table === 'lost_items' ? match?.lost_item?.id : match?.found_item?.id;
   const currentMatch = String(sourceId) === String(item.id) ? match : null;
   // Ownership always belongs to the lost reporter, even when opened from Found.
   const lostItem = table === 'lost_items' ? item : currentMatch?.lost_item;
   const cancelApproval = async foundItemId => {
-    if (onCancel) return onCancel(foundItemId, lostItem.id);
-    await lostItemsApi.updateStatus(lostItem.id, 'active');
-    if (foundItemId) await foundItemsApi.updateStatus(foundItemId, 'active');
+    const result = await activityLogsApi.cancelMatch(lostItem.id, foundItemId);
+    if (result?.success !== true) throw new Error('The server did not confirm cancellation. Please try again.');
+    showToast('Both reports are available for matching again.', 'success', 'Potential match cancelled');
     onComplete?.();
   };
   return <div className="potential-match-review">

@@ -9,6 +9,7 @@ function harness({ saved = null } = {}) {
   const state=[], refs=[], deps=[], memo=[], effects=[], cleanups=[];
   let si=0,ri=0,ei=0,mi=0;
   const channels=[],removed=[],writes=[];
+  let liveRefresh;
   const appState={currentState:'active',addEventListener(_event,fn){appState.change=state=>{appState.currentState=state;fn(state);};return {remove(){}};}};
   let snapshot={conversationId:7,messages:[{id:1,conversation_id:'7',sender:'user'},{id:2,conversation_id:'7',sender:'admin'}]}, fail=false;
   const react={createContext:()=>({Provider:'Provider'}),createElement:(type,props,...children)=>({type,props:{...props,children}}),
@@ -20,6 +21,7 @@ function harness({ saved = null } = {}) {
   const supabase={channel(name){const channel={name,on(_event,filter,callback){channel.filter=filter;channel.callback=callback;return this;},subscribe(callback){callback('SUBSCRIBED');return this;}};channels.push(channel);return channel;},removeChannel:async channel=>{removed.push(channel.name);}};
   const code=require('@babel/core').transformSync(readFileSync(new URL('../src/context/MessageBadgeContext.js',import.meta.url),'utf8'),{babelrc:false,configFile:false,plugins:[require.resolve('@babel/plugin-transform-react-jsx'),require.resolve('@babel/plugin-transform-modules-commonjs')]}).code;
   const context=vm.createContext({exports:{},console,Set,Promise,setInterval:()=>1,clearInterval(){},require(name){
+    if(name.includes('LiveDataContext'))return {useLiveSubscription(callback){liveRefresh=callback;return {status:'live'};}};
     if(name==='react')return react;
     if(name==='react-native')return {AppState:appState};
     if(name.includes('async-storage'))return {getItem:async()=>saved,setItem:async(key,value)=>writes.push({key,value})};
@@ -34,21 +36,21 @@ function harness({ saved = null } = {}) {
   let value;
   const render=()=>{si=ri=ei=mi=0;value=component({user:{id:5,name:'Student'},children:null}).props.value;return value;};
   const settle=async()=>{for(let pass=0;pass<6;pass++){render();effects.splice(0).forEach(fn=>fn());await new Promise(resolve=>setImmediate(resolve));}return render();};
-  return {settle,channels,removed,writes,appState,setSnapshot:next=>{snapshot=next;},setFailure:next=>{fail=next;},unmount:()=>cleanups.forEach(fn=>fn?.())};
+  return {settle,channels,removed,writes,appState,live:()=>liveRefresh(),setSnapshot:next=>{snapshot=next;},setFailure:next=>{fail=next;},unmount:()=>cleanups.forEach(fn=>fn?.())};
 }
 test('actual mobile provider counts incoming only, saves read receipts, handles live replies, and cleans subscriptions',async()=>{
  const app=harness();
  let badge=await app.settle();
  assert.equal(badge.unreadCount,1);
- assert.equal(app.channels.filter(channel=>channel.filter.table==='messages').length,1);
- assert.equal(app.channels.find(channel=>channel.filter.table==='messages').filter.filter,'conversation_id=eq.7');
+ assert.equal(badge.syncStatus,'live');
+ assert.equal(app.channels.length,0, 'Private data must not use anonymous realtime channels');
  badge.markSeen(badge.messages);
  badge=await app.settle();
  assert.equal(badge.unreadCount,0);
  assert.equal(app.writes.at(-1).key,'lf-message-read-v2:5');
  assert.deepEqual(JSON.parse(app.writes.at(-1).value),{messages:['2']});
  app.setSnapshot({conversationId:7,messages:[...badge.messages,{id:3,conversation_id:'7',sender:'admin'}]});
- app.channels.find(channel=>channel.filter.table==='messages').callback();
+ await app.live();
  badge=await app.settle();
  assert.equal(badge.unreadCount,1);
  app.appState.change('background');

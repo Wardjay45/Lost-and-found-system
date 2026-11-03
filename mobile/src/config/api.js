@@ -10,10 +10,14 @@ const normalizeUrl = value => {
   return /^https?:\/\/[^/?#]+$/i.test(base) ? base + '/api' : base;
 };
 
+export const isReleaseBuild = typeof __DEV__ !== 'undefined' && __DEV__ === false;
+const releaseApiUrl = isReleaseBuild && process.env.EXPO_PUBLIC_API_URL ? normalizeUrl(process.env.EXPO_PUBLIC_API_URL) : null;
+
 let cachedApiUrl = null;
 
 // Load persisted server URL from AsyncStorage
 const loadPersistedUrl = async () => {
+  if (releaseApiUrl) { cachedApiUrl = releaseApiUrl; return releaseApiUrl; }
   try {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -28,6 +32,7 @@ const loadPersistedUrl = async () => {
 
 // Save server URL to AsyncStorage
 export const saveServerUrl = async (url) => {
+  if (releaseApiUrl) return false;
   try {
     const cleanUrl = normalizeUrl(url); // Remove trailing slashes
     await AsyncStorage.setItem(STORAGE_KEY, cleanUrl);
@@ -47,6 +52,7 @@ export const getConfiguredServerUrl = async () => {
 
 // Clear persisted server URL (reset to auto-detect)
 export const resetServerUrl = async () => {
+  if (releaseApiUrl) return false;
   try {
     await AsyncStorage.removeItem(STORAGE_KEY);
     cachedApiUrl = null;
@@ -76,7 +82,7 @@ const autoDetectUrl = () => {
 
 // Synchronous getter for initial render (uses cached or auto-detect)
 export const getApiUrl = () => {
-  return cachedApiUrl || autoDetectUrl();
+  return releaseApiUrl || cachedApiUrl || autoDetectUrl();
 };
 
 // Async initializer - call this early in app startup

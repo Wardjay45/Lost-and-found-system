@@ -1,5 +1,10 @@
 import { notifyChange } from './liveNotifications.mjs';
 import { activityLogQuery } from '../../../shared/activityLogs.mjs';
+const mutationTables = {
+  'lost-items': 'lost_items', 'found-items': 'found_items', messages: 'messages',
+  categories: 'categories', users: 'users', 'qr-locations': 'qr_locations',
+  'activity-logs': 'activity_logs', feedback: 'feedback', settings: 'settings',
+};
 // Use relative path to leverage Vite proxy in dev, or fallback to env var
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -24,8 +29,10 @@ const request = async (endpoint, options = {}) => {
   }
 
   const data = await res.json();
+  const warning = res.headers?.get('X-Activity-Warning');
+  if (warning && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('lf-admin-warning', { detail: warning }));
   if (options.method && options.method !== 'GET') {
-    const table = endpoint.startsWith('/lost-items') ? 'lost_items' : endpoint.startsWith('/found-items') ? 'found_items' : endpoint.startsWith('/messages') ? 'messages' : null;
+    const table = mutationTables[endpoint.split(/[/?]/)[1]];
     if (table) notifyChange(table);
   }
   return data;
@@ -40,6 +47,10 @@ export const authApi = {
 export const feedbackApi = {
   getAll: () => request('/feedback'),
   getSummary: () => request('/feedback/summary'),
+};
+
+export const analyticsApi = {
+  getForecast: (options = {}) => request('/analytics/forecast', options),
 };
 
 // Categories
@@ -62,6 +73,8 @@ export const usersApi = {
   updateStatus: (id, status) => request(`/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
   update: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 };
+
+usersApi.updateRole = (id, role) => request(`/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
 
 // Lost Items
 export const lostItemsApi = {
@@ -114,6 +127,7 @@ export const activityLogsApi = {
     return request(`/activity-logs${activityLogQuery(params)}`);
   },
   create: (data) => request('/activity-logs', { method: 'POST', body: JSON.stringify(data) }),
+  cancelMatch: (lostId, foundId) => request('/activity-logs/unmatch', { method: 'POST', body: JSON.stringify({ lost_item_id: lostId, found_item_id: foundId }) }),
 };
 
 // QR Locations

@@ -1,3 +1,4 @@
+import { useLiveRefresh } from '../context/LiveDataContext';
 import { TouchableOpacity, TextInput } from '../components/SpeechControls';
 import React, { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -81,8 +82,8 @@ export default function MyClaimsScreen({ navigation }) {
     }
   };
 
-  const loadItems = useCallback(async () => {
-    setLoading(true);
+  const loadItems = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     if (!user?.id) {
       setItems([]);
       setLoadError('Sign in to view your reports.');
@@ -111,6 +112,8 @@ export default function MyClaimsScreen({ navigation }) {
   useFocusEffect(useCallback(() => {
     loadItems();
   }, [loadItems]));
+
+  useLiveRefresh(() => loadItems(true), ['lost_items', 'found_items', 'matches', 'activity_logs']);
 
   const openCancelModal = (item) => {
     setCancelTarget(item);
@@ -182,9 +185,7 @@ export default function MyClaimsScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Refresh reports" style={[styles.tab, styles.refreshTab, HC.touch]} onPress={() => { loadItems(); refreshFeedback(); }}>
-          <FormIcon name="refresh-cw" size={18} color={themeColors.accent} />
-        </TouchableOpacity>
+
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -198,7 +199,7 @@ export default function MyClaimsScreen({ navigation }) {
         ) : loadError ? (
           <View style={styles.empty}>
             <Text style={[styles.emptyText, HC.textMuted, { fontSize: scaledFontSize(15) }]}>{loadError}</Text>
-            <TouchableOpacity accessibilityLabel="Refresh reports" onPress={() => { loadItems(); refreshFeedback(); }} style={[styles.retryButton, HC.touch]} accessibilityRole="button">
+            <TouchableOpacity accessibilityLabel="Retry loading reports" onPress={() => { loadItems(); refreshFeedback(); }} style={[styles.retryButton, HC.touch]} accessibilityRole="button">
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           </View>
@@ -552,7 +553,6 @@ const baseStyles = StyleSheet.create({
   tabActive: { backgroundColor: '#4f46e5' },
   tabText: { fontSize: 14, fontWeight: '600', color: '#94a3b8' },
   tabTextActive: { color: '#fff' },
-  refreshTab: { flexGrow: 0, minWidth: 48, paddingHorizontal: 12, backgroundColor: 'rgba(30, 41, 59, 0.3)' },
   scroll: { padding: 20, paddingTop: 8, paddingBottom: 100 },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 48 },

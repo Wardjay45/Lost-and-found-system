@@ -59,6 +59,7 @@ export default function LostItems() {
       const [data, categories] = await Promise.all([lostItemsApi.getAll(), categoriesApi.getAll()]);
       if (version !== liveRequest.current) return;
       setItems(data); setCategories(categories); setPageError('');
+      setSelectedItem(current => current ? data.find(item => String(item.id) === String(current.id)) || null : null);
     } catch (err) {
       if (version === liveRequest.current) setPageError(err.message || 'Unable to load this section.');
     } finally {
@@ -69,7 +70,7 @@ export default function LostItems() {
     void loadReports();
     return invalidateRequests;
   }, [loadReports, invalidateRequests]);
-  useLiveRefresh('lost_items', loadReports);
+  useLiveRefresh(['lost_items', 'categories'], loadReports);
 
   const filtered = useMemo(() => {
     return items
@@ -98,7 +99,7 @@ export default function LostItems() {
     e.preventDefault();
     if (submittingRef.current) return;
     if (reportLocations.loading || reportLocations.error || !reportLocations.locations.some(place => place.name === formData.locationLost)) {
-      setFormError('Refresh the approved locations and choose an active location before submitting.');
+      setFormError('Approved locations are unavailable. They will update automatically; choose an active location before submitting.');
       return;
     }
     submittingRef.current = true;

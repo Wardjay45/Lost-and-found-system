@@ -1,4 +1,8 @@
+import { parseStoredTimestamp } from './timestamps.mjs';
+
 const types = {
+  unmatch: ['Potential match cancelled', 'Match cancellations', 'close'],
+  create: ['Record created', 'New records', 'plus'],
   report: ['Report created', 'Reports', 'document'], match: ['Potential match recorded', 'Potential matches', 'matching'],
   claim: ['Claim recorded', 'Claims & handovers', 'success'], cancel: ['Report cancelled', 'Cancellations', 'close'],
   update: ['Record updated', 'Updates', 'edit'], resolve: ['Report resolved', 'Resolutions', 'check'],
@@ -29,15 +33,13 @@ export function activityView(log) {
   const score = payload?.score;
   const similarity = typeof score === 'number' && Number.isFinite(score) && score >= -1 && score <= 100 ? Math.round(score <= 1 ? score * 100 : score) : null;
   const label = types[action]?.[0] || (action === 'unknown' ? 'Activity recorded' : action.replace(/\b\w/g, letter => letter.toUpperCase()));
-  const summary = text(payload?.text) || text(payload?.message) || text(payload?.description) ||
-    (pair ? `${pair.lostName} → ${pair.foundName}` : payload ? JSON.stringify(payload, null, 2) : text(log.details)) || 'No details recorded.';
-  let timestamp = null;
-  if (typeof log.timestamp === 'string' && log.timestamp.trim()) {
-    let value = log.timestamp.trim().replace(' ', 'T');
-    if (/^\d{4}-\d{2}-\d{2}T/.test(value) && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)) value += 'Z';
-    const date = new Date(value);
-    if (Number.isFinite(date.getTime())) timestamp = date.toISOString();
-  }
+  const details = text(log.details).trim();
+  const plainDetails = /^[{[]/.test(details) ? '' : details;
+  const summary = (action === 'match' && pair
+    ? `Lost: ${pair.lostName} → Found: ${pair.foundName}${similarity === null ? '' : ` (${similarity}% similarity)`}`
+    : text(payload?.text) || text(payload?.message) || text(payload?.description) || text(payload?.reason) ||
+      (pair ? `${pair.lostName} → ${pair.foundName}` : payload ? '' : plainDetails)) || label;
+  const timestamp = (parseStoredTimestamp(log.timestamp) || parseStoredTimestamp(log.created_at))?.toISOString() || null;
   return { ...log, action, originalAction: log.action, label, summary, pair, similarity, timestamp,
     icon: types[action]?.[2] || 'activity', notes: text(payload?.notes), recoveryId: text(payload?.recovery_id) };
 }

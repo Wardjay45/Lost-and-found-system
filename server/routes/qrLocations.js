@@ -86,12 +86,13 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/qr-locations/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('qr_locations')
       .delete()
-      .eq('id', req.params.id);
+      .eq('id', req.params.id).select('id').maybeSingle();
 
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Location not found or already deleted.' });
     res.json({ message: 'QR location deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });

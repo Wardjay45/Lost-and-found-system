@@ -1,3 +1,4 @@
+import { LiveDataProvider } from './src/context/LiveDataContext';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -36,9 +37,11 @@ export default function App() {
       <SafeAreaProvider>
         <AuthProvider>
           <AccessibilityProvider>
+            <LiveDataProvider>
             <MessageBadgeProvider>
               <AppShell />
             </MessageBadgeProvider>
+            </LiveDataProvider>
           </AccessibilityProvider>
         </AuthProvider>
       </SafeAreaProvider>

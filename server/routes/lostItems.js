@@ -1,3 +1,4 @@
+import { validateStatusChange } from '../services/reportStatus.js';
 import { backgroundTask } from '../services/backgroundTask.js';
 import { aiFetch } from '../services/aiClient.js';
 import { Router } from 'express';
@@ -9,16 +10,7 @@ import { createRecoveryClaimHandler } from './recoveryFeedback.js';
 
 const router = Router();
 
-const logActivity = async (action, details, userName = 'Admin', role = 'admin') => {
-  try {
-    await supabase.from('activity_logs').insert({
-      action, details, user_name: userName, role,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (e) {
-    console.error('Activity log error:', e.message);
-  }
-};
+
 
 const AI_URL = process.env.AI_SERVER_URL || 'http://localhost:8000';
 
@@ -164,7 +156,7 @@ router.post('/upload', upload.single('image'), async (req, res) => {
       })
       .select().single();
     if (error) throw error;
-    await logActivity('report', `Lost item reported: ${data.item_id} — ${description}`, reporter_name || 'Admin');
+
     backgroundTask(generateEmbeddings(data.id, 'lost_items', imageUrl, description));
     res.status(201).json(data);
   } catch (err) {
@@ -251,6 +243,11 @@ router.post('/', async (req, res) => {
 router.put('/:id/status', async (req, res) => {
   try {
     const { status, cancel_reason } = req.body;
+    const { data: current, error: currentError } = await supabase.from('lost_items').select('id,status').eq('id', req.params.id).single();
+    if (currentError) throw currentError;
+    if (!current) return res.status(404).json({ error: 'Report not found.' });
+    validateStatusChange(current.status, status, cancel_reason);
+
     const updates = { status, last_updated: new Date().toISOString() };
     if (status === 'resolved' || status === 'claimed') {
       updates.resolved_date = new Date().toISOString();
@@ -262,15 +259,11 @@ router.put('/:id/status', async (req, res) => {
       .from('lost_items')
       .update(updates)
       .eq('id', req.params.id)
+      .eq('status', current.status)
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
-    if (!data) return res.status(404).json({ error: 'Lost item not found' });
-    const action = status === 'cancelled' ? 'cancel' : status === 'resolved' ? 'resolve' : status === 'claimed' ? 'claim' : 'update';
-    const logDetail = status === 'cancelled' && cancel_reason
-      ? `Lost item ${data.item_id || req.params.id} cancelled. Reason: ${cancel_reason}`
-      : `Lost item ${data.item_id || req.params.id} status changed to ${status}`;
-    await logActivity(action, logDetail);
+    if (!data) return res.status(409).json({ error: 'This report changed while saving. Reopen it and try again.' });
     res.json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -289,7 +282,7 @@ router.put('/:id', async (req, res) => {
     if (location_lost !== undefined) updates.location_lost = await requireReportLocation(supabase, location_lost);
     if (req.body.location_details !== undefined) updates.location_details = parseLocationDetails(req.body.location_details);
     if (image !== undefined) updates.image = image;
-    if (status !== undefined) updates.status = status;
+    if (status !== undefined) return res.status(400).json({ error: 'Use the report status action or verified handover to change status.' });
     const { data, error } = await supabase
       .from('lost_items')
       .update(updates)
@@ -298,7 +291,7 @@ router.put('/:id', async (req, res) => {
       .single();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Lost item not found' });
-    await logActivity('update', `Lost item ${req.params.id} updated`);
+
     res.json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -311,8 +304,9 @@ router.post('/:id/claim', createRecoveryClaimHandler());
 // DELETE /api/lost-items/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const { error } = await supabase.from('lost_items').delete().eq('id', req.params.id);
+    const { data, error } = await supabase.from('lost_items').delete().eq('id', req.params.id).select('id').maybeSingle();
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Report not found or already deleted.' });
     res.json({ message: 'Lost item deleted successfully' });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });

@@ -37,11 +37,18 @@ test('activity API authenticates admins, reads full history and derives match-ev
   assert.equal(saved.user_name, 'Current Admin'); assert.equal(saved.role, 'superadmin');
   assert.equal(JSON.parse(saved.details).lost_item_id, 11); assert.match(JSON.parse(saved.details).text, /Blue bag/);
   const count = logs.length;
+  const rounded = await call('/', { ...fields, details: JSON.stringify({ lost_item_id: 11, found_item_id: 22, score: .958, image_score: .94, text_score: 1.0000001192092896 }) });
+  assert.equal(rounded.status, 201);
+  assert.equal(JSON.parse((await rounded.json()).details).text_score, 1);
+  for (const score of [1.1, -1.1, '0.9', null]) {
+    const invalid = await call('/', { ...fields, details: JSON.stringify({ lost_item_id: 11, found_item_id: 22, score }) });
+    assert.equal(invalid.status, 400);
+  }
   assert.equal((await call('/', { action: 'claim', details: 'Invented handover' })).status, 400);
   assert.equal((await call('/', { action: 'match', details: '{bad' })).status, 400);
   assert.equal((await call('/', { action: 'match', manual_review: true, details: JSON.stringify({ lost_item_id: 11, found_item_id: 22 }) })).status, 400);
   items.found_items.status = 'claimed'; assert.equal((await call('/', fields)).status, 409);
   items.found_items.status = 'potential_match'; databaseError = true;
   assert.equal((await call('/', fields)).status, 503); assert.equal((await call()).status, 503);
-  assert.equal(logs.length, count);
+  assert.equal(logs.length, count + 1);
 });

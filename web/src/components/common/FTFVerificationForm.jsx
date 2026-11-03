@@ -189,7 +189,7 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
       </div>
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded-lg text-xs">
+        <div role="alert" className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded-lg text-xs">
           {error}
         </div>
       )}
@@ -208,14 +208,14 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
             type="button"
             onClick={async () => {
               if (claimLock.current) return;
-              claimLock.current = true; setClaiming(true);
+              claimLock.current = true; setClaiming(true); setError('');
               try { await onCancel(foundItemId); } catch (error) { setError(error.message); }
               finally { claimLock.current = false; setClaiming(false); }
             }}
             disabled={claiming || loadingMatch || !!matchError}
             className="flex-1 bg-red-500 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors"
           >
-            ❌ Cancel Approval
+            Cancel Potential Match
           </button>
         )}
       </div>

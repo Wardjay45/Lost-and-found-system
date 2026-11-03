@@ -11,6 +11,13 @@ from evaluate import summarize, validate_manifest, run_benchmark
 
 
 class ScoringTests(unittest.TestCase):
+    def test_float32_rounding_never_produces_a_score_above_one(self):
+        result = score_candidates([1.0000001192092896, 0], [1.0000001192092896, 0],
+                                  [{"id": "same", "image_embedding": [1, 0], "text_embedding": [1, 0]}])[0]
+        self.assertEqual(result["image_score"], 1.)
+        self.assertEqual(result["text_score"], 1.)
+        self.assertLessEqual(result["score"], 1.)
+
     def test_combination_matches_existing_weights_and_missing_modality_rules(self):
         rows = [{"id": "a", "image_embedding": [1, 0], "text_embedding": [0, 1]},
                 {"id": "b", "image_embedding": [0, 1], "text_embedding": [1, 0]}]

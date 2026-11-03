@@ -1,20 +1,17 @@
-import AppIcon from './AppIcon';
-
-export default function ReportLocationFields({ kind, value, onChange, details, onDetailsChange, locations, loading, error, refresh, disabled }) {
+export default function ReportLocationFields({ kind, value, onChange, details, onDetailsChange, locations, loading, error, disabled }) {
   const id = `report-${kind}-location`;
   const available = locations.some(place => place.name === value);
   return <div className="col-span-full space-y-4">
     <div>
       <div className="flex items-center justify-between gap-3 mb-1">
         <label htmlFor={id} className="text-sm font-medium">Location {kind === 'lost' ? 'Lost' : 'Found'} *</label>
-        <button type="button" className="ui-button ui-button-link" onClick={refresh} disabled={loading || disabled}><AppIcon name="refresh" />{loading ? 'Refreshing...' : 'Refresh locations'}</button>
       </div>
       <select id={id} className="ui-input w-full" value={available ? value : ''} onChange={event => onChange(event.target.value)} required disabled={loading || !!error || !locations.length || disabled} aria-describedby={`${id}-help`}>
         <option value="">{loading ? 'Loading locations...' : 'Select an approved location'}</option>
         {locations.map(place => <option key={place.id} value={place.name}>{place.name}</option>)}
       </select>
       <p id={`${id}-help`} className={`text-xs mt-2 ${error ? 'tone-error' : 'lf-text-muted'}`} role={error ? 'alert' : 'status'}>
-        {error || (loading ? 'Loading active locations.' : !locations.length ? 'No active locations available. Add one in Locations, then refresh.' : value && !available ? 'This location is no longer active. Choose another location.' : 'Choose an active location added by the administrator.')}
+        {error || (loading ? 'Loading active locations.' : !locations.length ? 'No active locations available. New locations will appear automatically when added in Locations.' : value && !available ? 'This location is no longer active. Choose another location.' : 'Choose an active location added by the administrator.')}
       </p>
     </div>
     <div>

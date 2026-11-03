@@ -1,12 +1,22 @@
+import { useAuth } from '../context/AuthContext';
+import { useRef } from 'react';
 import AppIcon from '../components/common/AppIcon';
 import { PageHeader, DataRegion } from '../components/common/UI';
 import { useState, useMemo, useEffect } from 'react';
 import { usersApi } from '../services/api';
+import useLiveRefresh from '../hooks/useLiveRefresh';
 import StatusBadge from '../components/common/StatusBadge';
 import Modal from '../components/common/Modal';
 import { formatDate, formatDateTime } from '../utils/formatters';
 
 export default function Users() {
+  const { user: actor } = useAuth();
+  const [actionError, setActionError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [roleDraft, setRoleDraft] = useState('student');
+  const actionLock = useRef(false);
+  const canManage = target => actor && String(target.id) !== String(actor.id) && target.role !== 'superadmin' && (actor.role === 'superadmin' || target.role === 'student');
   const [pageError, setPageError] = useState('');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,12 +25,14 @@ export default function Users() {
     loadUsers();
   }, []);
 
-  const loadUsers = () => {
-    setLoading(true);
-    usersApi.getAll().then(data => {
-      setUsers(data);
+  const loadUsers = ({ background = false } = {}) => {
+    if (!background) setLoading(true);
+    return usersApi.getAll().then(data => {
+      setUsers(data); setPageError('');
+      setSelectedUser(current => current ? data.find(user => String(user.id) === String(current.id)) || null : null);
     }).catch(err => setPageError(err.message || 'Unable to load this section.')).finally(() => setLoading(false));
   };
+  useLiveRefresh('users', loadUsers);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedUser, setSelectedUser] = useState(null);
@@ -38,20 +50,23 @@ export default function Users() {
   }, [users, search, statusFilter]);
 
   const handleStatusChange = async (userId, newStatus) => {
+    if (actionLock.current) return;
+    actionLock.current = true; setSaving(true); setActionError('');
     try {
-      await usersApi.updateStatus(userId, newStatus);
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+      const saved = confirmAction.action === 'role' ? await usersApi.updateRole(userId, roleDraft) : await usersApi.updateStatus(userId, newStatus);
+      setUsers(prev => prev.map(u => u.id === userId ? saved : u));
+      setSuccess('Account updated successfully.');
+      setConfirmAction(null); setSelectedUser(null);
     } catch (err) {
-      console.error(err);
-    }
-    setConfirmAction(null);
-    setSelectedUser(null);
+      setActionError(err.message || 'Unable to update this account. Please try again.');
+    } finally { actionLock.current = false; setSaving(false); }
   };
 
   const userStatusOptions = (currentUser) => {
+    if (!currentUser || !canManage(currentUser)) return [];
     const currentStatus = currentUser?.status;
     const options = [];
-    if (currentStatus !== 'active') options.push({ label: 'Activate', status: 'active', color: 'bg-green-600 hover:bg-green-700' });
+    if (currentStatus === 'suspended') options.push({ label: 'Activate', status: 'active', color: 'bg-green-600 hover:bg-green-700' });
     if (currentStatus !== 'suspended' && currentUser?.role !== 'superadmin') options.push({ label: 'Suspend', status: 'suspended', color: 'bg-yellow-600 hover:bg-yellow-700' });
     if (currentStatus !== 'archived' && currentUser?.role !== 'superadmin') options.push({ label: 'Archive', status: 'archived', color: 'bg-gray-600 hover:bg-gray-700' });
     if (currentStatus === 'archived') options.push({ label: 'Restore', status: 'active', color: 'bg-green-600 hover:bg-green-700' });
@@ -61,6 +76,7 @@ export default function Users() {
   return (
     <div className="page page-users">
       <PageHeader title="Users" description={"Manage campus accounts and access."} />
+      {success && <div className="ui-alert ui-alert-success" role="status">{success}</div>}
 
       <div className="ui-panel p-4 mb-6 ui-toolbar">
         <div className="flex flex-wrap gap-3">
@@ -85,7 +101,7 @@ export default function Users() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Student ID</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Department</th>
 
-                <th>Reported</th>
+                <th>Joined</th><th>Role</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
               </tr>
@@ -105,15 +121,15 @@ export default function Users() {
                   <td data-label="Student ID" className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{u.student_id || u.studentId}</td>
                   <td data-label="Department" className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{u.department}</td>
 
-                  <td data-label="Reported" className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatDateTime(u.join_date || u.joinDate)}</td>
-                  <td data-label="Status" className="px-4 py-3"><StatusBadge status={u.status} /></td>
+                  <td data-label="Joined" className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatDateTime(u.join_date || u.joinDate)}</td>
+                  <td data-label="Role" className="px-4 py-3">{u.role === 'student' ? 'Campus user' : u.role === 'superadmin' ? 'Superadmin' : 'Administrator'}</td><td data-label="Status" className="px-4 py-3"><StatusBadge status={u.status} /></td>
                   <td data-label="Actions" className="px-4 py-3 text-right">
-                    <button type="button" onClick={() => setSelectedUser(u)} className="ui-button ui-button-link mr-2">View</button>
-                    {u.role !== 'superadmin' ? (
+                    <button type="button" disabled={saving} onClick={() => { setActionError(''); setSelectedUser(u); setRoleDraft(u.role); }} className="ui-button ui-button-link mr-2">View</button>
+                    {canManage(u) ? (
                       u.status !== 'archived' ? (
-                        <button type="button" onClick={() => setConfirmAction({ user: u, action: 'archive' })} className="ui-button ui-button-secondary"><AppIcon name="box" /> Archive</button>
+                        <button type="button" disabled={saving} onClick={() => { setActionError(''); setConfirmAction({ user: u, action: 'archive' }); }} className="ui-button ui-button-secondary"><AppIcon name="box" /> Archive</button>
                       ) : (
-                        <button type="button" onClick={() => setConfirmAction({ user: u, action: 'restore' })} className="ui-button ui-button-success"><AppIcon name="refresh" /> Restore</button>
+                        <button type="button" disabled={saving} onClick={() => { setActionError(''); setConfirmAction({ user: u, action: 'restore' }); }} className="ui-button ui-button-success"><AppIcon name="refresh" /> Restore</button>
                       )
                     ) : (
                       <span className="text-xs text-gray-400 dark:text-gray-500 italic"><AppIcon name="shield" /> Admin</span>
@@ -126,7 +142,7 @@ export default function Users() {
         </div>
       </div></DataRegion>
 
-      <Modal isOpen={!!selectedUser} onClose={() => setSelectedUser(null)} title="User Details" size="lg">
+      <Modal isOpen={!!selectedUser} onClose={() => { if (!actionLock.current) setSelectedUser(null); }} title="User Details" size="lg">
         {selectedUser && (
           <div className="space-y-4">
             <div className="flex items-center gap-4">
@@ -145,11 +161,18 @@ export default function Users() {
               <div><p className="text-xs text-gray-500 dark:text-gray-400">Joined</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(selectedUser.join_date || selectedUser.joinDate)}</p></div>
               <div><p className="text-xs text-gray-500 dark:text-gray-400">Last Active</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(selectedUser.last_active || selectedUser.lastActive)}</p></div>
             </div>
+            {actor?.role === 'superadmin' && canManage(selectedUser) && <div className="space-y-2">
+              <label htmlFor="account-role" className="block text-sm font-medium">Account role</label>
+              <select id="account-role" className="ui-input w-full" value={roleDraft} disabled={saving} onChange={event => setRoleDraft(event.target.value)}>
+                <option value="student">Campus user</option><option value="admin">Administrator</option>
+              </select>
+              <button type="button" className="ui-button ui-button-primary" disabled={saving || roleDraft === selectedUser.role} onClick={() => { setActionError(''); setConfirmAction({ user: selectedUser, action: 'role' }); }}>Save role</button>
+            </div>}
             <div className="flex gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
               {userStatusOptions(selectedUser).map(opt => (
                 <button type="button"
                   key={opt.status}
-                  onClick={() => setConfirmAction({ user: selectedUser, action: opt.status === 'active' && selectedUser.status === 'archived' ? 'restore' : opt.status === 'active' ? 'activate' : opt.status })}
+                  disabled={saving} onClick={() => { setActionError(''); setConfirmAction({ user: selectedUser, action: opt.status === 'active' && selectedUser.status === 'archived' ? 'restore' : opt.status === 'active' ? 'activate' : opt.status }); }}
                   className={`ui-button flex-1 text-white py-2 rounded-lg text-sm font-medium ${opt.color} transition-colors`}
                 >
                   {opt.label}
@@ -163,17 +186,19 @@ export default function Users() {
         )}
       </Modal>
 
-      <Modal isOpen={!!confirmAction} onClose={() => setConfirmAction(null)} title="Confirm account change" size="sm">{confirmAction && <>
+      <Modal isOpen={!!confirmAction} onClose={() => { if (!actionLock.current) setConfirmAction(null); }} title="Confirm account change" size="sm">{confirmAction && <>
 
+            {actionError && <div className="ui-alert ui-alert-error mb-4" role="alert">{actionError}</div>}
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              {confirmAction.action === 'role' && `Change this account to ${roleDraft === 'admin' ? 'Administrator' : 'Campus user'}?`}
               {confirmAction.action === 'archive' && `Are you sure you want to archive "${confirmAction.user.name}"? They will no longer be able to use the system. You can restore them later.`}
               {confirmAction.action === 'restore' && `Restore "${confirmAction.user.name}"? They will regain access to the system with active status.`}
               {confirmAction.action === 'suspend' && `Suspend "${confirmAction.user.name}"? They will be temporarily blocked from the system.`}
               {confirmAction.action === 'activate' && `Activate "${confirmAction.user.name}"? They will regain full access to the system.`}
             </p>
             <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setConfirmAction(null)} className="ui-button ui-button-secondary">Cancel</button>
-              <button type="button"
+              <button type="button" disabled={saving} onClick={() => { setActionError(''); setConfirmAction(null); }} className="ui-button ui-button-secondary">Cancel</button>
+              <button type="button" disabled={saving}
                 onClick={() => {
                   const statusMap = { archive: 'archived', restore: 'active', suspend: 'suspended', activate: 'active' };
                   handleStatusChange(confirmAction.user.id, statusMap[confirmAction.action]);
@@ -184,10 +209,11 @@ export default function Users() {
                   'bg-green-600 hover:bg-green-700'
                 }`}
               >
-                {confirmAction.action === 'archive' && 'Archive'}
-                {confirmAction.action === 'restore' && 'Restore'}
-                {confirmAction.action === 'suspend' && 'Suspend'}
-                {confirmAction.action === 'activate' && 'Activate'}
+                {saving ? 'Savingâ€¦' : confirmAction.action === 'role' ? 'Confirm role' : ''}
+                {!saving && confirmAction.action === 'archive' && 'Archive'}
+                {!saving && confirmAction.action === 'restore' && 'Restore'}
+                {!saving && confirmAction.action === 'suspend' && 'Suspend'}
+                {!saving && confirmAction.action === 'activate' && 'Activate'}
               </button>
             </div>
           </>}</Modal>

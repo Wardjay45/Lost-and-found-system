@@ -22,7 +22,6 @@ const defaultSettings = {
   highContrast: false,
   darkMode: false,
   textSize: 'normal',
-  emailNotifications: true,
   privacyMasking: true,
   colorTheme: 'lavender',   // NEW: colour theme key
 };

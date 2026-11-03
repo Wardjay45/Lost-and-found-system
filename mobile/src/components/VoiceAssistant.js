@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { TouchableOpacity, StyleSheet, Animated, Keyboard } from 'react-native';
 import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import FormIcon from './FormIcon';
 
@@ -47,7 +47,13 @@ export default function VoiceAssistant({ text, onSpeak, autoSpeak }) {
 export function TTSStopButton() {
   const styles = useThemedStyles(baseStyles);
   const { ttsEnabled, stopSpeaking } = useAccessibility();
-  if (!ttsEnabled) return null;
+  const [keyboardVisible, setKeyboardVisible] = React.useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  if (!ttsEnabled || keyboardVisible) return null;
   return (
     <TouchableOpacity style={styles.stopButton} onPress={stopSpeaking} activeOpacity={0.8}
       accessibilityLabel="Stop text to speech" accessibilityRole="button">

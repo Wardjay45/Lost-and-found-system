@@ -5,6 +5,7 @@ import { readAll } from '../services/readAll.js';
 import { normalizeActivityAction } from '../../shared/activityLogs.mjs';
 import { findRecordedPair } from '../../shared/potentialMatches.mjs';
 import { loadSavedPotentialMatch } from '../services/potentialMatches.js';
+import { normalizeMatchScore } from '../../shared/matchingScores.mjs';
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 
@@ -53,15 +54,29 @@ export function createActivityLogsRouter({ client = supabase, jwtSecret = () => 
     decisionQueue = pending.catch(() => {});
     return pending;
   };
+  router.post('/unmatch', serializeDecision(handle(async (req, res, actor) => {
+    const validId = value => ['string','number'].includes(typeof value) && /^[1-9]\d*$/.test(String(value)) && Number.isSafeInteger(Number(value));
+    if (!validId(req.body?.lost_item_id) || !validId(req.body?.found_item_id)) fail(400, 'Choose the saved lost and found report pair.');
+    const result = await client.rpc('cancel_potential_match', { p_lost_id: Number(req.body.lost_item_id), p_found_id: Number(req.body.found_item_id), p_admin_id: actor.id });
+    if (result.error) {
+      if (result.error.code === 'P0001') fail(409, result.error.message);
+      throw result.error;
+    }
+    if (result.data?.success !== true) throw new Error('Potential match cancellation was not confirmed.');
+    res.json(result.data);
+  })));
   // Only match decisions are client-created; other events come from server workflows.
   router.post('/', serializeDecision(handle(async (req, res, actor) => {
     if (req.body.action !== 'match' || typeof req.body.details !== 'string' || req.body.details.length > 10000) fail(400, 'Only a valid potential-match decision can be recorded here.');
     let details;
     try { details = JSON.parse(req.body.details); } catch { fail(400, 'Match details must be valid JSON.'); }
     const validId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
-    const validScore = value => typeof value === 'number' && Number.isFinite(value) && value >= -1 && value <= 1;
-    if (!details || !validId(details.lost_item_id) || !validId(details.found_item_id) || !validScore(details.score) ||
-        ['image_score', 'text_score'].some(key => details[key] !== undefined && !validScore(details[key]))) fail(400, 'Choose a valid report pair and similarity scores.');
+    if (!details || Array.isArray(details) || !validId(details.lost_item_id) || !validId(details.found_item_id)) fail(400, 'Choose a valid report pair.');
+    for (const key of ['score', 'image_score', 'text_score']) {
+      const score = normalizeMatchScore(details[key] === undefined && key !== 'score' ? 0 : details[key]);
+      if (score === null) fail(400, 'Similarity scores are invalid. Matching results will update automatically.');
+      details[key] = score;
+    }
     const getItem = async (table, id) => {
       const columns = table === 'lost_items' ? 'id,item_id,status,description,reporter_name,reporter_id,last_updated' : 'id,item_id,status,description,last_updated';
       const { data, error } = await client.from(table).select(columns).eq('id', Number(id)).maybeSingle();

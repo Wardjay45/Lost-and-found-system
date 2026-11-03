@@ -1,4 +1,4 @@
-import { findRecordedPair, reportId } from '../../shared/potentialMatches.mjs';
+import { findRecordedPair, latestPairEvent, reportId } from '../../shared/potentialMatches.mjs';
 import { readAll } from './readAll.js';
 const fail = message => { throw Object.assign(new Error(message), { status: 409 }); };
 const score = value => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -9,7 +9,8 @@ const storedStatuses = ['confirmed', 'matched', 'potential_match'];
 export async function loadSavedPotentialMatch(client, itemId, table) {
   const id = reportId(itemId);
   if (!id || !['lost_items', 'found_items'].includes(table)) throw Object.assign(new Error('Choose a valid lost or found report.'), { status: 400 });
-  const logs = await readAll(client.from('activity_logs').select('*').eq('action', 'match').order('timestamp', { ascending: false }).order('id', { ascending: false }));
+  const logs = await readAll(client.from('activity_logs').select('*').in('action', ['match', 'unmatch']).order('timestamp', { ascending: false }).order('id', { ascending: false }));
+  if (latestPairEvent(logs, id, table)?.log.action === 'unmatch') return null;
   const recorded = findRecordedPair(logs, id, table);
   let pair = recorded;
   if (!pair) {

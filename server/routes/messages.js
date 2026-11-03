@@ -1,152 +1,56 @@
 import { Router } from 'express';
 import supabase from '../db.js';
 import { readAll } from '../services/readAll.js';
+import { createConversationAccess } from '../services/conversationAccess.js';
+import { createProductionAccess } from '../services/productionAccess.js';
 
-const router = Router();
-
-const OFFICE_NAME = 'Lost & Found Office';
-
-// Find or create a conversation for a specific user
-async function findOrCreateUserConversation(userName) {
-  if (!userName) return null;
-
-  // Try to find existing conversation for this user
-  const { data: existing } = await supabase
-    .from('conversations')
-    .select('*')
-    .eq('name', userName)
-    .single();
-
-  if (existing) return existing;
-
-  // Create new conversation for this user
-  const { data: created } = await supabase
-    .from('conversations')
-    .insert({ name: userName, avatar: userName.charAt(0).toUpperCase() })
-    .select()
-    .single();
-
-  return created;
-}
-
-// POST /api/messages/conversations — admin manually creates a conversation with a user
-router.post('/conversations', async (req, res) => {
-  try {
-    const { name, avatar } = req.body;
-    if (!name) return res.status(400).json({ error: 'name is required' });
-
-    const conv = await findOrCreateUserConversation(name);
-    if (!conv) return res.status(500).json({ error: 'Failed to create conversation' });
-
-    // Update avatar if provided
-    if (avatar && conv.avatar !== avatar) {
-      const { data: updated } = await supabase
-        .from('conversations')
-        .update({ avatar })
-        .eq('id', conv.id)
-        .select()
-        .single();
-      res.status(201).json(updated || conv);
-    } else {
-      res.status(201).json(conv);
+export function createMessagesRouter({ client = supabase, jwtSecret = () => process.env.JWT_SECRET } = {}) {
+  const router = Router(), access = createConversationAccess(client);
+  router.use(createProductionAccess(client, { jwtSecret }));
+  const handle = operation => async (req, res) => {
+    try { await operation(req, res); }
+    catch (error) { res.status(error.status || 503).json({ error: error.status ? error.message : 'Messages are unavailable. Please try again.' }); }
+  };
+  const check = result => { if (result.error) throw result.error; return result.data; };
+  const validId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
+  router.post('/conversations', handle(async (req, res) => {
+    let id = req.body.recipient_id;
+    if (!id && typeof req.body.name === 'string') {
+      const users = check(await client.from('users').select('id').eq('name', req.body.name.trim()).limit(2));
+      if (users.length !== 1) return res.status(409).json({ error: 'Select the recipient account rather than a shared name.' });
+      id = users[0].id;
     }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/messages/conversations — returns all user conversations for admin sidebar
-router.get('/conversations', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .not('name', 'in', `(${OFFICE_NAME},Admin Support)`)
-      .order('id');
-
-    if (error) throw error;
-
-    // For each conversation, get the last message
-    const enriched = await Promise.all((data || []).map(async (conv) => {
-      const { data: msgs } = await supabase
-        .from('messages')
-        .select('text, sender, time')
-        .eq('conversation_id', conv.id)
-        .order('time', { ascending: false })
-        .limit(1);
-
-      const lastMsg = msgs && msgs.length > 0 ? msgs[0] : null;
-      return { ...conv, last_message: lastMsg };
-    }));
-
-    res.json(enriched);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/messages/count — returns incoming message count (for admin sidebar badge)
-router.get('/count', async (req, res) => {
-  try {
-    const { count, error } = await supabase
-      .from('messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('sender', 'user');
-
-    if (error) throw error;
-    res.json({ count: count || 0 });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/messages/:conversationId — get messages for a specific conversation
-router.get('/:conversationId', async (req, res) => {
-  try {
-    const data = await readAll(supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', req.params.conversationId)
-      .order('time').order('id'));
-    res.json(data || []);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/messages — send a message. Creates user conversation if needed.
-router.post('/', async (req, res) => {
-  try {
-    const { sender, sender_name, text } = req.body;
-    if (!text) return res.status(400).json({ error: 'text is required' });
-
+    res.status(201).json(await access.forUser(await access.recipient(id), true));
+  }));
+  router.get('/conversations', handle(async (_req, res) => {
+    const rows = await readAll(client.from('conversations').select('*').not('name', 'in', '(Lost & Found Office,Admin Support)').order('id'));
+    res.json(await Promise.all(rows.map(async conversation => {
+      const messages = check(await client.from('messages').select('text,sender,time').eq('conversation_id', String(conversation.id)).order('time', { ascending: false }).order('id', { ascending: false }).limit(1));
+      const owner = conversation.user_id ? check(await client.from('users').select('student_id,email').eq('id', conversation.user_id).maybeSingle()) : null;
+      return { ...conversation, account_label: owner?.student_id || owner?.email || (conversation.user_id ? 'Account #' + conversation.user_id : 'Legacy conversation'), last_message: messages[0] || null };
+    })));
+  }));
+  router.get('/count', handle(async (_req, res) => {
+    const result = await client.from('messages').select('id', { count: 'exact', head: true }).eq('sender', 'user');
+    if (result.error) throw result.error;
+    res.json({ count: result.count || 0 });
+  }));
+  router.get('/:conversationId', handle(async (req, res) => {
+    if (!validId(req.params.conversationId)) return res.status(400).json({ error: 'Choose a valid conversation.' });
+    res.json(await readAll(client.from('messages').select('*').eq('conversation_id', String(req.params.conversationId)).order('time').order('id')));
+  }));
+  router.post('/', handle(async (req, res) => {
+    const text = typeof req.body.text === 'string' ? req.body.text.trim() : '';
+    if (!text || text.length > 5000) return res.status(400).json({ error: 'Enter a message of 1–5,000 characters.' });
     let conversationId = req.body.conversation_id;
-
-    // If no conversation_id but sender_name provided, find/create the user's conversation
-    if (!conversationId && sender_name) {
-      const conv = await findOrCreateUserConversation(sender_name);
-      if (conv) conversationId = conv.id;
-    }
-
-    if (!conversationId) {
-      return res.status(400).json({ error: 'conversation_id or sender_name is required' });
-    }
-
-    const finalSender = sender || (sender_name ? 'user' : 'admin');
-
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({ conversation_id: conversationId, sender: finalSender, text })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Return conversation info so clients know the ID
-    res.status(201).json({ ...data, conversation_id: conversationId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-export default router;
+    if (req.body.recipient_id) conversationId = (await access.forUser(await access.recipient(req.body.recipient_id), true)).id;
+    if (!validId(conversationId)) return res.status(400).json({ error: 'Choose a conversation or recipient account.' });
+    const exists = check(await client.from('conversations').select('id').eq('id', Number(conversationId)).maybeSingle());
+    if (!exists) return res.status(404).json({ error: 'Conversation not found.' });
+    const row = check(await client.from('messages').insert({ conversation_id: String(conversationId), sender: 'admin', text, time: new Date().toISOString() }).select().single());
+    if (!row) throw new Error('Message not saved');
+    res.status(201).json(row);
+  }));
+  return router;
+}
+export default createMessagesRouter();

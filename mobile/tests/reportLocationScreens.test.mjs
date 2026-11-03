@@ -15,13 +15,14 @@ function nodes(tree) {
   return [tree, ...nodes(tree.props?.children)];
 }
 
-function reportScreen(screenName, { currentLocations = approved, selected = 'Library' } = {}) {
+function reportScreen(screenName, { currentLocations = approved, selected = 'Library', insertError = null, emptyResult = false } = {}) {
   const states = [];
   let cursor = 0;
   let refreshes = 0;
   const inserts = [];
   const effects = [];
   const alerts = [];
+  let keyboardDismisses = 0, backCount = 0;
   const refs = [];
   let refIndex = 0;
   let firstRender = true;
@@ -32,6 +33,7 @@ function reportScreen(screenName, { currentLocations = approved, selected = 'Lib
       if (!(index in states)) states[index] = initial;
       return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }];
     },
+    useCallback: callback => callback,
     useEffect(effect) { if (firstRender) effects.push(effect); },
     useRef(initial) {
       const index = refIndex++;
@@ -43,15 +45,18 @@ function reportScreen(screenName, { currentLocations = approved, selected = 'Lib
   const client = { from(table) {
     if (table === 'categories') return { select: async () => ({ data: [{ id: 7, name: 'Bags', icon: 'bag' }], error: null }) };
     if (table === 'qr_locations') return { select: () => ({ eq: () => ({ order: async () => ({ data: currentLocations, error: null }) }) }) };
-    return { insert(data) { inserts.push({ table, data }); return { select: () => ({ single: async () => ({ data: { id: 5 }, error: null }) }) }; } };
+    return { insert(data) { inserts.push({ table, data }); return { select: () => ({ single: async () => ({ data: emptyResult ? null : { id: 5 }, error: insertError }) }) }; } };
   } };
   const source = babel.transformSync(readFileSync(new URL(`../src/screens/${screenName}.js`, import.meta.url), 'utf8'), {
     babelrc: false, configFile: false,
     plugins: [require.resolve('@babel/plugin-transform-react-jsx'), require.resolve('@babel/plugin-transform-modules-commonjs')],
   }).code;
   const context = vm.createContext({ exports: {}, console: { log() {}, error() {} }, require(name) {
+    if (name.includes('LiveDataContext')) return { useLiveRefresh() {} };
+    if (name.includes('ReportSuccessSheet')) return { default: 'ReportSuccessSheet', __esModule: true };
+    if (name.includes('KeyboardAwareForm')) return { default: 'ScrollView', __esModule: true };
     if (name === 'react') return react;
-    if (name === 'react-native') return { ...native, StyleSheet: { create: value => value }, Alert: { alert: (...args) => alerts.push(args) } };
+    if (name === 'react-native') return { ...native, StyleSheet: { create: value => value }, Keyboard: { dismiss() { keyboardDismisses++; } }, Alert: { alert: (...args) => alerts.push(args) } };
     if (name === '@react-navigation/native') return { useRoute: () => ({ params: {} }) };
     if (name === 'expo-image-picker') return {};
     if (name.includes('SpeechControls')) return { TextInput: 'TextInput', TouchableOpacity: 'TouchableOpacity' };
@@ -75,7 +80,7 @@ function reportScreen(screenName, { currentLocations = approved, selected = 'Lib
   function render() {
     cursor = 0;
     refIndex = 0;
-    const result = context.exports.default({ navigation: { goBack() {} } });
+    const result = context.exports.default({ navigation: { goBack() { backCount++; } } });
     firstRender = false;
     return result;
   }
@@ -84,11 +89,11 @@ function reportScreen(screenName, { currentLocations = approved, selected = 'Lib
     effects.forEach(effect => effect());
     await new Promise(resolve => setImmediate(resolve));
   }
-  return { render, ready, inserts, alerts, refreshes: () => refreshes };
+  return { render, ready, inserts, alerts, keyboardDismisses: () => keyboardDismisses, backCount: () => backCount, refreshes: () => refreshes };
 }
 
 for (const screenName of ['ReportLostScreen', 'ReportFoundScreen']) {
-  test(`${screenName}: admin dropdown and refresh preserve additional details and microphone transcription`, async () => {
+  test(`${screenName}: admin dropdown and automatic updates preserve additional details and microphone transcription`, async () => {
     const view = reportScreen(screenName);
     let rendered = view.render();
     const picker = nodes(rendered).find(node => node.type === 'ReportLocationPicker');
@@ -99,10 +104,7 @@ for (const screenName of ['ReportLostScreen', 'ReportFoundScreen']) {
     assert.doesNotMatch(JSON.stringify(rendered), /About you|Your Name/);
     assert.doesNotMatch(JSON.stringify(rendered), /📷|🎤|🔍|📦|🔒|▼/u);
     assert.equal(picker.props.value, 'Library');
-    const refresh = nodes(rendered).find(node => node.type === 'ScrollView').props.refreshControl;
-    assert.equal(refresh.type, 'RefreshControl');
-    await refresh.props.onRefresh();
-    assert.equal(view.refreshes(), 1);
+    assert.equal(nodes(rendered).find(node => node.type === 'ScrollView').props.refreshControl, undefined);
     const detailsMic = nodes(rendered).filter(node => node.type === 'MicButton').find(node => {
       node.props.onPress();
       const modal = nodes(view.render()).find(item => item.type === 'SpeechInputModal');
@@ -116,7 +118,6 @@ for (const screenName of ['ReportLostScreen', 'ReportFoundScreen']) {
     assert.equal(details.props.value, 'Near the west stairs');
     assert.equal(details.props.multiline, true);
     assert.equal(details.props.maxLength, 500);
-    await refresh.props.onRefresh();
     assert.equal(nodes(view.render()).find(node => node.type === 'TextInput' && node.props.accessibilityLabel?.startsWith('Additional information')).props.value, 'Near the west stairs');
     assert.equal(nodes(rendered).filter(node => node.type === 'MicButton').length, 2);
   });
@@ -145,10 +146,39 @@ for (const screenName of ['ReportLostScreen', 'ReportFoundScreen']) {
         assert.equal(report.data.location_details, 'Near the stairs');
         assert.equal(report.data[screenName === 'ReportLostScreen' ? 'reporter_id' : 'finder_id'], 42);
         assert.equal(report.data[screenName === 'ReportLostScreen' ? 'reporter_name' : 'finder_name'], 'Student');
+        const sheet = nodes(view.render()).find(node => node.type === 'ReportSuccessSheet');
+        assert.equal(sheet.props.visible, true);
+        assert.equal(sheet.props.type, screenName === 'ReportLostScreen' ? 'lost' : 'found');
+        assert.equal(view.alerts.length, 0, 'Success must not open a native alert');
+        assert.equal(view.keyboardDismisses(), 1);
+        await submit.props.onPress();
+        assert.equal(view.inserts.length, 1, 'A saved report stays locked against resubmission');
+        sheet.props.onDone();
+        assert.equal(view.backCount(), 1);
+
       } else {
         assert.equal(view.inserts.length, 0);
+        assert.equal(nodes(view.render()).find(node => node.type === 'ReportSuccessSheet').props.visible, false);
         assert.match(JSON.stringify(view.alerts), /Select an active location/);
       }
+    }
+  });
+}
+
+for (const screenName of ['ReportLostScreen', 'ReportFoundScreen']) {
+  test(`${screenName}: failed or unconfirmed saves retain the draft, show no success, and allow retry`, async () => {
+    for (const response of [{ insertError: new Error('Network unavailable') }, { emptyResult: true }]) {
+      const view = reportScreen(screenName, response); await view.ready();
+      let tree = view.render();
+      nodes(tree).find(node => node.type === 'TextInput' && node.props.placeholder.startsWith('Describe')).props.onChangeText('Blue bag');
+      nodes(tree).find(node => node.type === 'TouchableOpacity' && JSON.stringify(node.props.children).includes('Select category')).props.onPress();
+      nodes(view.render()).find(node => node.type === 'TouchableOpacity' && JSON.stringify(node.props.children).includes('Bags')).props.onPress();
+      const submit = () => nodes(view.render()).find(node => node.type === 'TouchableOpacity' && JSON.stringify(node.props.children).includes('Submit Report'));
+      await submit().props.onPress();
+      assert.equal(nodes(view.render()).find(node => node.type === 'ReportSuccessSheet').props.visible, false);
+      assert.equal(nodes(view.render()).find(node => node.type === 'TextInput' && node.props.placeholder.startsWith('Describe')).props.value, 'Blue bag');
+      assert.equal(view.keyboardDismisses(), 0); assert.equal(view.alerts.length, 1);
+      await submit().props.onPress(); assert.equal(view.inserts.length, 2, 'A failed save can be retried');
     }
   });
 }

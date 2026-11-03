@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, Modal } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
-import { getConfiguredServerUrl, saveServerUrl, resetServerUrl } from '../config/api';
+import { getConfiguredServerUrl, saveServerUrl, resetServerUrl, isReleaseBuild } from '../config/api';
 import VoiceAssistant from '../components/VoiceAssistant';
 import FormIcon from '../components/FormIcon';
 
@@ -11,9 +11,6 @@ export default function SettingsScreen({ navigation }) {
   const styles = useThemedStyles(baseStyles);
   const { speak, accessibilityStyles, scaledFontSize, themeMode, setThemeMode, highContrast, setHighContrast, fontSize, themeColors } = useAccessibility();
   const { user, logout } = useAuth();
-  const [pushEnabled, setPushEnabled] = useState(true);
-  const [emailEnabled, setEmailEnabled] = useState(true);
-  const [smsEnabled, setSmsEnabled] = useState(false);
   const HC = accessibilityStyles;
 
   // Server URL config
@@ -39,11 +36,14 @@ export default function SettingsScreen({ navigation }) {
       Alert.alert('Error', 'Please enter a valid server URL');
       return;
     }
-    if (!trimmed.startsWith('http')) {
-      Alert.alert('Error', 'URL must start with http:// or https://');
+    try {
+      const parsed = new URL(trimmed);
+      if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.search || parsed.hash) throw new Error();
+    } catch {
+      Alert.alert('Invalid URL', 'Enter a complete http:// or https:// server address.');
       return;
     }
-    await saveServerUrl(trimmed);
+    if (!await saveServerUrl(trimmed)) { Alert.alert('Unable to save', 'Please try saving the server address again.'); return; }
     setCurrentServerUrl(trimmed);
     setShowServerConfig(false);
     speak('Server URL updated');
@@ -51,7 +51,7 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handleResetServerUrl = async () => {
-    await resetServerUrl();
+    if (!await resetServerUrl()) { Alert.alert('Unable to reset', 'Please try again.'); return; }
     setCurrentServerUrl('');
     setServerUrl('');
     setShowServerConfig(false);
@@ -65,10 +65,11 @@ export default function SettingsScreen({ navigation }) {
       <View style={styles.headerSection}>
         <Text style={[styles.title, HC.text, { fontSize: scaledFontSize(24) }]}>Settings</Text>
         <Text style={[styles.subtitle, HC.textMuted, { fontSize: scaledFontSize(14) }]}>Customize your experience</Text>
-        <VoiceAssistant text="Settings. Customize notifications, appearance, and accessibility features." />
+        <VoiceAssistant text="Settings. Customize appearance, accessibility, and server settings." />
       </View>
 
-        {/* Server Configuration */}
+        {/* Development connection controls are omitted from the release app. */}
+        {!isReleaseBuild && <>
         <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(13) }]}>Server</Text>
         <TouchableOpacity style={[styles.menuItem, HC.card, HC.touch]} onPress={() => setShowServerConfig(true)}>
           <Text style={{ fontSize: scaledFontSize(18), marginRight: 12 }}>🌐</Text>
@@ -119,13 +120,11 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </Modal>
 
-        <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(13) }]}>Notifications</Text>
-        <View style={[styles.card, HC.card]}>
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>🔔 Push Notifications</Text><Switch accessibilityLabel="Push notifications" value={pushEnabled} onValueChange={(v) => { setPushEnabled(v); speak(v ? 'Push notifications enabled' : 'Push notifications disabled'); }} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={pushEnabled ? '#4f46e5' : '#475569'} /></View>
-          <View style={[styles.divider, HC.border]} />
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>📧 Email Notifications</Text><Switch accessibilityLabel="Email notifications" value={emailEnabled} onValueChange={setEmailEnabled} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={emailEnabled ? '#4f46e5' : '#475569'} /></View>
-          <View style={[styles.divider, HC.border]} />
-          <View style={styles.row}><Text style={[styles.rowLabel, HC.text, { fontSize: scaledFontSize(15) }]}>📱 SMS Notifications</Text><Switch accessibilityLabel="SMS notifications" value={smsEnabled} onValueChange={setSmsEnabled} trackColor={{ false: '#334155', true: 'rgba(79, 70, 229, 0.5)' }} thumbColor={smsEnabled ? '#4f46e5' : '#475569'} /></View>
+        </>}
+
+        <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(13) }]}>Updates</Text>
+        <View style={[styles.card, HC.card, { padding: 16 }]}>
+          <Text style={[HC.textMuted, { fontSize: scaledFontSize(14) }]}>Report updates appear automatically in My Reports. Replies from the office appear in Messages.</Text>
         </View>
 
         <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(13) }]}>Appearance</Text>
@@ -147,10 +146,9 @@ export default function SettingsScreen({ navigation }) {
         <View style={[styles.infoCard, HC.card]}>
           <Text style={{ fontSize: scaledFontSize(14) }}>☁️</Text>
           <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={[styles.menuLabel, HC.text, { fontSize: scaledFontSize(14) }]}>Cloud Connected</Text>
-            <Text style={[HC.textMuted, { fontSize: scaledFontSize(11) }]}>Direct connection • Works on any network</Text>
+            <Text style={[styles.menuLabel, HC.text, { fontSize: scaledFontSize(14) }]}>Server connection</Text>
+            <Text style={[HC.textMuted, { fontSize: scaledFontSize(11) }]}>{isReleaseBuild ? 'Connected through the campus service' : 'Uses your configured server address'}</Text>
           </View>
-          <View style={styles.connectedDot} />
         </View>
 
         <TouchableOpacity style={[styles.logoutBtn, HC.touch]} onPress={() => { speak('Signing out.'); logout(); }} activeOpacity={0.7}>

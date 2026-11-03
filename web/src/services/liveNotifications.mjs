@@ -1,5 +1,6 @@
 export const notificationEvent = 'lf-notifications-changed';
 export function notifyChange(table = 'all') {
+  if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(notificationEvent, { detail: { table } }));
 }
 

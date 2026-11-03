@@ -1,0 +1,11 @@
+{
+  "id": "ubc-found-items-demo",
+  "name": "UBC found-item records",
+  "source": "User-supplied UBC CSV extract",
+  "record_type": "found_items",
+  "temporary": true,
+  "geography": "UBC, Canada",
+  "source_last_record_date": "2026-11-02",
+  "coverage_verified": false,
+  "description": "Items found and recorded by UBC. These are not confirmed lost-item reports or Philippine statistics."
+}

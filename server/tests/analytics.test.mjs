@@ -1,0 +1,45 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import { createAnalyticsRouter } from '../routes/analytics.js';
+import { readFileSync } from 'node:fs';
+
+const secret = 'isolated-forecast-test';
+const history = [{ ds: '2026-08-01', y: 2 }, { ds: '2026-09-01', y: 20 }, { ds: '2026-11-01', y: 4 }];
+const result = {
+  historical: history,
+  forecast: [{ ds: '2026-12-01', yhat: 6, yhat_lower: 0, yhat_upper: 15 }],
+  dataset: { name: 'UBC found-item records', description: 'Temporary found-item demonstration', source: 'Supplied CSV', temporary: true, observed_months: 3, total_records: 26, first_observed_month: '2026-08-01', last_observed_month: '2026-11-01', missing_month_count: 1, missing_months: ['2026-10-01'] },
+  warnings: ['Experimental demonstration'], model: { name: 'Prophet', horizon_months: 1, yearly_seasonality: false, interval_width: .8 },
+};
+test('forecast proxy requires an active admin, forwards to Python, validates responses, and sanitizes failures', async t => {
+  const actor = { id: 7, role: 'admin', status: 'active' };
+  let status = 200, body = result, calls = 0, unavailable = false;
+  const client = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: actor, error: null }) }) }) }) };
+  const app = express(); app.use('/api/analytics', createAnalyticsRouter({ client, jwtSecret: secret, fetcher: async (url, options) => {
+    calls++; assert.ok(url.endsWith('/api/analytics/forecast')); assert.ok(options.signal);
+    if (unavailable) throw Error('private backend path');
+    return { status, ok: status === 200, json: async () => body };
+  } }));
+  const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const url = 'http://127.0.0.1:' + server.address().port + '/api/analytics/forecast';
+  const call = (role = 'admin', token = jwt.sign({ id: 7, role }, secret)) => fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  assert.equal((await call('admin', 'bad')).status, 401); assert.equal(calls, 0);
+  actor.role = 'student'; assert.equal((await call('student')).status, 403); assert.equal(calls, 0);
+  actor.role = 'admin'; actor.status = 'suspended'; assert.equal((await call()).status, 403);
+  actor.status = 'active'; let response = await call(); assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store'); assert.deepEqual(await response.json(), result);
+  actor.role = 'superadmin'; assert.equal((await call('superadmin')).status, 200); actor.role = 'admin';
+  body = { ...result, forecast: [] }; assert.equal((await call()).status, 503);
+  body = { ...result, forecast: ['2026-12-01', '2027-01-01', '2027-02-01'].map(ds => ({ ...result.forecast[0], ds })) }; assert.equal((await call()).status, 503);
+  body = { ...result, model: { ...result.model, horizon_months: 3 } }; assert.equal((await call()).status, 503);
+  body = { ...result, forecast: [{ ...result.forecast[0], yhat: NaN }, ...result.forecast.slice(1)] }; assert.equal((await call()).status, 503);
+  status = 422; assert.equal((await call()).status, 422);
+  status = 500; body = { detail: 'private backend path' }; response = await call(); assert.equal(response.status, 503); assert.ok(!(await response.text()).includes('private backend path'));
+  unavailable = true; response = await call(); assert.equal(response.status, 503); assert.ok(!(await response.text()).includes('private backend path'));
+});
+
+test('both local and public server entry points mount the forecast API', () => {
+  for (const entry of ['app.js', 'start-public.js']) assert.match(readFileSync(new URL('../' + entry, import.meta.url), 'utf8'), /app\.use\('\/api\/analytics', analyticsRouter\)/);
+});

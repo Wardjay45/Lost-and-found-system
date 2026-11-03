@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { readAll } from './readAll.js';
+import { adminLiveTables } from '../../shared/adminLiveTables.mjs';
 
 export async function notificationSnapshot(db) {
   const [lost, found, messages] = await Promise.all([
@@ -13,7 +14,7 @@ export async function notificationSnapshot(db) {
 
 // One database subscription for all connected admin browsers. Only invalidations
 // cross the stream; clients fetch data through the authenticated snapshot route.
-export function createNotificationRouter(db, { jwtSecret = process.env.JWT_SECRET || 'lost-and-found-secret-key-2026' } = {}) {
+export function createNotificationRouter(db, { jwtSecret = process.env.JWT_SECRET } = {}) {
   const router = Router();
   const clients = new Set();
   let channel, sequence = 0;
@@ -22,12 +23,13 @@ export function createNotificationRouter(db, { jwtSecret = process.env.JWT_SECRE
   };
   router.use(async (req, res, next) => {
     try {
+      if (!jwtSecret) return res.status(503).json({ error: 'Server sessions are not configured.' });
       const token = req.headers.authorization?.split(' ')[1];
       if (!token) return res.status(401).json({ error: 'Sign in required' });
-      const claims = jwt.verify(token, jwtSecret);
+      const claims = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] });
       const { data: user, error } = await db.from('users').select('role, status').eq('id', claims.id).single();
       if (error) return res.status(503).json({ error: 'Unable to verify notification access' });
-      if (!user || !['admin', 'superadmin'].includes(user.role) || ['archived', 'suspended'].includes(user.status)) {
+      if (!user || !['admin', 'superadmin'].includes(user.role) || user.status !== 'active') {
         return res.status(403).json({ error: 'Administrator access required' });
       }
       next();
@@ -43,7 +45,7 @@ export function createNotificationRouter(db, { jwtSecret = process.env.JWT_SECRE
     clients.add(res);
     if (!channel) {
       channel = db.channel('admin-notification-events:' + ++sequence);
-      for (const table of ['lost_items', 'found_items', 'messages', 'conversations']) {
+      for (const table of adminLiveTables) {
         channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => broadcast(table));
       }
       channel.subscribe(status => {

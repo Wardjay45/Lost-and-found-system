@@ -1,24 +1,30 @@
+import { parseStoredTimestamp, formatCampusDateTime } from '../../../shared/timestamps.mjs';
+
 export function formatDate(dateStr) {
-  if (!dateStr) return 'N/A';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const date = parseStoredTimestamp(dateStr);
+  return date ? date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
 }
 
 export function formatDateTime(dateStr) {
-  if (!dateStr) return 'N/A';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return parseStoredTimestamp(dateStr) ? formatCampusDateTime(dateStr) : 'N/A';
+}
+
+export function formatTime(dateStr) {
+  const date = parseStoredTimestamp(dateStr);
+  return date ? date.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }) : '';
 }
 
 export function timeAgo(dateStr) {
   if (!dateStr) return '';
   const now = new Date();
-  const d = new Date(dateStr);
+  const d = parseStoredTimestamp(dateStr);
+  if (!d) return '';
   const diffMs = now - d;
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
+  if (diffMs < -60000) return formatDateTime(dateStr);
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;

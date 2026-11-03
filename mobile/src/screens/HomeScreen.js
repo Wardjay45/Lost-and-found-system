@@ -1,7 +1,8 @@
+import { useLiveRefresh } from '../context/LiveDataContext';
 import { TouchableOpacity } from '../components/SpeechControls';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import supabase from '../config/supabase';
@@ -42,7 +43,6 @@ export default function HomeScreen({ navigation }) {
   const [stats, setStats] = useState({ total: 0, active: 0, resolved: 0 });
   const [recentReports, setRecentReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const HC = accessibilityStyles;
 
@@ -74,11 +74,7 @@ export default function HomeScreen({ navigation }) {
     }
   }, [user?.id]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchUserItems();
-    setRefreshing(false);
-  }, [fetchUserItems]);
+  useLiveRefresh(fetchUserItems, ['lost_items', 'found_items', 'matches', 'activity_logs']);
 
   useFocusEffect(useCallback(() => {
     fetchUserItems();
@@ -109,9 +105,7 @@ export default function HomeScreen({ navigation }) {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#818cf8" colors={['#818cf8']} />
-        }
+
       >
 
         {/* Header */}

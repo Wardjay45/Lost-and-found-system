@@ -34,7 +34,6 @@ export default function ReportCollection({ collection }) {
   const { isUnread } = useNotifications();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [reportType, setReportType] = useState('all');
@@ -44,14 +43,13 @@ export default function ReportCollection({ collection }) {
   const invalidateRequests = useCallback(() => { requestVersion.current++; }, []);
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
-    setRefreshing(true);
     try {
       const next = await loadReportCollection(collection, { lostItemsApi, foundItemsApi });
       if (version === requestVersion.current) { setReports(next); setError(''); }
     } catch (err) {
       if (version === requestVersion.current) setError(err.message || 'Unable to load item reports.');
     } finally {
-      if (version === requestVersion.current) { setLoading(false); setRefreshing(false); }
+      if (version === requestVersion.current) setLoading(false);
     }
   }, [collection]);
   useEffect(() => { void load(); return invalidateRequests; }, [load, invalidateRequests]);
@@ -74,7 +72,6 @@ export default function ReportCollection({ collection }) {
   return <div className="page page-report-collection">
     <PageHeader title={config.title} description={config.description} actions={<>
       {collection === 'potential' && <Link to="/matching" className="ui-button ui-button-secondary"><AppIcon name="matching" />Smart matching</Link>}
-      <button type="button" className="ui-button ui-button-secondary" onClick={load} disabled={refreshing}><AppIcon name="refresh" />{refreshing ? 'Refreshing...' : 'Refresh'}</button>
     </>} />
     <div className="collection-summary" aria-busy={loading}>{totals.map(([label, value, icon]) => <div className="ui-panel collection-summary-card" key={label}><span className="collection-summary-icon"><AppIcon name={icon} /></span><div><span>{label}</span><strong>{loading ? '...' : value}</strong></div></div>)}</div>
     <div className="ui-toolbar collection-toolbar">

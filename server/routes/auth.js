@@ -90,6 +90,7 @@ router.get('/me', async (req, res) => {
 
     if (error || !user) return res.status(404).json({ error: 'User not found' });
 
+    if (user.status !== 'active' || user.role !== decoded.role) return res.status(403).json({ error: 'This account no longer has access. Please sign in again.' });
     res.json({
       id: user.id,
       name: user.name,

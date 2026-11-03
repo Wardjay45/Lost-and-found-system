@@ -1,3 +1,4 @@
+import { useLiveRefresh } from '../context/LiveDataContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -17,9 +18,9 @@ export function useReportLocations(initialLocation = '') {
 
   useEffect(() => { setLocation(initialName); }, [initialName]);
 
-  const refreshLocations = useCallback(async () => {
+  const refreshLocations = useCallback(async (background = false) => {
     const current = ++request.current;
-    setLocationsLoading(true);
+    if (!background) setLocationsLoading(true);
     setLocationsError('');
     try {
       const next = await loadReportLocations(supabase);
@@ -29,7 +30,7 @@ export function useReportLocations(initialLocation = '') {
     } catch {
       if (current !== request.current) return;
       setLocations([]);
-      setLocationsError('Unable to load approved locations. Refresh to try again.');
+      setLocationsError('Unable to sync locations. Reconnecting automatically.');
     } finally {
       if (current === request.current) setLocationsLoading(false);
     }
@@ -40,11 +41,13 @@ export function useReportLocations(initialLocation = '') {
     return () => { request.current++; };
   }, [refreshLocations]));
 
+  useLiveRefresh(() => refreshLocations(true), ['qr_locations']);
+
   const locationLocked = Boolean(initialName && location === initialName && locations.some(place => place.name === initialName));
   return { location, setLocation, locations, locationsLoading, locationsError, refreshLocations, locationLocked };
 }
 
-export default function ReportLocationPicker({ value, locations, loading, error, onChange, onRefresh, disabled, locked }) {
+export default function ReportLocationPicker({ value, locations, loading, error, onChange, disabled, locked }) {
   const styles = useThemedStyles(baseStyles);
   const { accessibilityStyles: HC, scaledFontSize, themeColors } = useAccessibility();
   const [expanded, setExpanded] = useState(false);
@@ -54,11 +57,7 @@ export default function ReportLocationPicker({ value, locations, loading, error,
     <View>
       <View style={styles.refreshRow}>
         <Text style={[styles.hint, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Locations added by your administrator</Text>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Refresh locations" disabled={disabled || loading}
-          accessibilityState={{ disabled: disabled || loading, busy: loading }} onPress={onRefresh} style={[styles.refreshButton, HC.touch]}>
-          {loading ? <ActivityIndicator color={themeColors.accent} size="small" /> : <FormIcon name="refresh-cw" size={16} color={themeColors.accent} />}
-          <Text style={[styles.refreshText, HC.textAccent, { fontSize: scaledFontSize(13) }]}>Refresh</Text>
-        </TouchableOpacity>
+        {loading && <ActivityIndicator color={themeColors.accent} size="small" />}
       </View>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="Select report location"
         accessibilityState={{ disabled: unavailable, expanded: expanded && !unavailable }}
@@ -70,7 +69,7 @@ export default function ReportLocationPicker({ value, locations, loading, error,
         <FormIcon name={expanded && !unavailable ? 'chevron-up' : 'chevron-down'} size={18} />
       </TouchableOpacity>
       {!!error && <Text accessibilityRole="alert" style={[styles.message, HC.text, { fontSize: scaledFontSize(13) }]}>{error}</Text>}
-      {!loading && !error && locations.length === 0 && <Text style={[styles.message, HC.textMuted, { fontSize: scaledFontSize(13) }]}>No active locations yet. Ask your administrator to add a location, then tap Refresh.</Text>}
+      {!loading && !error && locations.length === 0 && <Text style={[styles.message, HC.textMuted, { fontSize: scaledFontSize(13) }]}>No active locations yet. New locations will appear automatically when your administrator adds them.</Text>}
       {locked && <Text style={[styles.message, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Location set from the campus QR code. Add exact details below.</Text>}
       {expanded && !unavailable && <ScrollView style={styles.dropdown} nestedScrollEnabled keyboardShouldPersistTaps="handled">
         {locations.map(place => (
@@ -89,8 +88,6 @@ export default function ReportLocationPicker({ value, locations, loading, error,
 const baseStyles = StyleSheet.create({
   refreshRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' },
   hint: { flex: 1, flexShrink: 1, minWidth: 120, color: '#94a3b8', lineHeight: 18 },
-  refreshButton: { minHeight: 44, padding: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  refreshText: { color: '#818cf8', fontWeight: '600' },
   select: { backgroundColor: 'rgba(15, 23, 42, 0.6)', borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.12)', borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52 },
   value: { flex: 1, flexShrink: 1, color: '#f1f5f9' },
   message: { color: '#94a3b8', marginTop: 8, lineHeight: 20 },

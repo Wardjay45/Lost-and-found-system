@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { qrLocationsApi } from '../services/api';
+import useLiveRefresh from './useLiveRefresh';
 
 export default function useReportLocations(isOpen) {
   const [locations, setLocations] = useState([]);
@@ -7,14 +8,14 @@ export default function useReportLocations(isOpen) {
   const [error, setError] = useState('');
   const requestId = useRef(0);
   const cancelPending = useCallback(() => { requestId.current++; }, []);
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ background = false } = {}) => {
     const id = ++requestId.current;
-    setLoading(true);
-    setError('');
+    if (!background) setLoading(true);
     try {
       const data = await qrLocationsApi.getAll();
       if (!Array.isArray(data)) throw new Error('Unable to load approved locations.');
       if (id !== requestId.current) return;
+      setError('');
       setLocations(data.filter(place => place.is_active === true && typeof place.name === 'string' && place.name.trim())
         .map(place => ({ ...place, name: place.name.trim() })).sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
@@ -29,5 +30,6 @@ export default function useReportLocations(isOpen) {
     if (isOpen) refresh();
     return cancelPending;
   }, [isOpen, refresh, cancelPending]);
+  useLiveRefresh('qr_locations', options => { if (isOpen) return refresh(options); });
   return { locations, loading, error, refresh };
 }

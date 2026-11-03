@@ -127,6 +127,7 @@ test('Google registration blocks concurrent requests and updates the session onl
     let stateIndex = 0;
     let resolveSignup;
     let calls = 0;
+    let dataSession = null;
     const pending = new Promise(resolve => { resolveSignup = resolve; });
     const react = {
       createContext: () => ({ Provider: 'Provider' }),
@@ -146,6 +147,7 @@ test('Google registration blocks concurrent requests and updates the session onl
         assert.equal(data.google_id_token, 'signed-token');
         return pending;
       } };
+      if (name.includes('services/dataSession')) return { setDataSession: value => { dataSession = value; } };
       if (name.includes('config/supabase')) return {};
       throw Error('Unexpected provider import: ' + name);
     } });
@@ -162,6 +164,7 @@ test('Google registration blocks concurrent requests and updates the session onl
     assert.deepEqual(await first, result);
     assert.equal(states[0], result.user);
     assert.equal(states[1], 'verified-session');
+    assert.equal(dataSession, 'verified-session');
     assert.equal(states[2], false);
     await signup({ ...fields, google_id_token: 'signed-token' });
     assert.equal(calls, 2);

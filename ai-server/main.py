@@ -14,12 +14,14 @@ from matching_scores import IMAGE_MODEL, TEXT_MODEL, score_candidates
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from analytics.routes import create_forecast_router
 from pydantic import BaseModel, Field
 import torch
 from sentence_transformers import SentenceTransformer
 from transformers import CLIPProcessor, CLIPModel
 
 app = FastAPI(title="Lost & Found AI", version="1.2.0")
+app.include_router(create_forecast_router())
 
 @app.middleware("http")
 async def service_access(request, call_next):

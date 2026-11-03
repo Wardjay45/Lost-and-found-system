@@ -197,6 +197,7 @@ router.post('/auto-match', async (req, res) => {
               image: lost.image,
               status: lost.status,
               reporter_name: lost.reporter_name,
+              reporter_id: lost.reporter_id,
               date_reported: lost.date_reported,
             },
             found_item: {

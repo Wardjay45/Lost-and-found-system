@@ -40,6 +40,8 @@ function view(path, { theme = 'dark', data = reports, accessibility = {} } = {})
     plugins: [require.resolve('@babel/plugin-transform-react-jsx'), require.resolve('@babel/plugin-transform-modules-commonjs')],
   }).code;
   const context = vm.createContext({ exports: {}, console, require(name) {
+    if (name.includes('ReportSuccessSheet')) return { default: 'ReportSuccessSheet', __esModule: true };
+    if (name.includes('LiveDataContext')) return { useLiveRefresh() {} };
     if (name === 'react') return react;
     if (name === 'react-native') return { ...native, StyleSheet: { create: value => value }, Alert: { alert() {} }, Dimensions: { get: () => ({ height: 844 }) }, Animated: { View: 'AnimatedView', Value: class { setValue() {} } } };
     if (name === '@react-navigation/native') return { useFocusEffect: callback => { if (first) effects.push(callback); } };
@@ -58,7 +60,7 @@ function view(path, { theme = 'dark', data = reports, accessibility = {} } = {})
     if (name.includes('services/reporting')) return { loadUserReports: async () => data };
     if (name.includes('config/api')) return { getConfiguredServerUrl: async () => '' };
     if (name.includes('MessageBadgeContext')) return {};
-    if (name === 'expo-av' || name === 'expo-file-system/next') return {};
+    if (name === 'expo-av' || name === 'expo-file-system') return {};
     if (name.includes('/screens/')) return { default: name, __esModule: true };
     throw Error('Unexpected import: ' + name);
   } });
@@ -89,12 +91,12 @@ test('home report actions and report summaries use outline icons while preservin
   assert.deepEqual(screen.navigation, ['ReportLost', 'ReportFound']);
 });
 
-test('claims and report details use professional type, refresh, empty, and close icons', async () => {
+test('claims and report details use professional type, empty, and close icons', async () => {
   const screen = view('../src/screens/MyClaimsScreen.js');
   await screen.ready();
   let tree = screen.render();
   const names = nodes(tree).filter(node => node.type === 'FormIcon').map(node => node.props.name);
-  for (const name of ['refresh-cw', 'search', 'package']) assert.ok(names.includes(name), `Missing ${name}`);
+  for (const name of ['search', 'package']) assert.ok(names.includes(name), `Missing ${name}`);
   nodes(tree).find(node => node.type === 'TouchableOpacity' && JSON.stringify(node.props.children).includes('Blue bag')).props.onPress();
   tree = screen.render();
   const close = nodes(tree).find(node => node.props?.accessibilityLabel === 'Close report details');

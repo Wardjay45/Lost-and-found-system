@@ -1,3 +1,4 @@
+import { setDataSession } from '../services/dataSession.mjs';
 import React, { createContext, useState, useContext, useRef } from 'react';
 import supabase from '../config/supabase';
 import { initApiUrl } from '../config/api';
@@ -17,6 +18,7 @@ export function AuthProvider({ children }) {
       const result = await requestGoogleAuth(await initApiUrl(), 'login', { email: email.trim().toLowerCase(), password });
       if (result.error) return result;
       if (!result.token || !result.user) return { error: 'The server did not confirm this login.' };
+      setDataSession(result.token);
       setToken(result.token);
       setUser(result.user);
       return { success: true };
@@ -35,6 +37,7 @@ export function AuthProvider({ children }) {
     try {
       const result = await requestGoogleAuth(await initApiUrl(), endpoint, fields);
       if (result.token && result.user) {
+        setDataSession(result.token);
         setToken(result.token);
         setUser(result.user);
       }
@@ -69,6 +72,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    setDataSession(null);
     setUser(null);
     setToken(null);
   };
