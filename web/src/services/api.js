@@ -24,8 +24,11 @@ const request = async (endpoint, options = {}) => {
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `HTTP ${res.status}`);
+    const error = await res.json().catch(() => ({}));
+    const message = error.error || (res.status === 404
+      ? 'This API endpoint is unavailable. Restart the API server to load the latest changes.'
+      : `Request failed (HTTP ${res.status}). Please try again.`);
+    throw new Error(message);
   }
 
   const data = await res.json();
@@ -50,7 +53,7 @@ export const feedbackApi = {
 };
 
 export const analyticsApi = {
-  getForecast: (options = {}) => request('/analytics/forecast', options),
+  getForecast: ({ timeframe = 'monthly', ...options } = {}) => request('/analytics/forecast?timeframe=' + encodeURIComponent(timeframe), options),
 };
 
 // Categories
@@ -74,7 +77,6 @@ export const usersApi = {
   update: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 };
 
-usersApi.updateRole = (id, role) => request(`/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
 
 // Lost Items
 export const lostItemsApi = {

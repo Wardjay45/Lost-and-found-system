@@ -118,6 +118,21 @@ class ForecastTests(unittest.TestCase):
         with self.assertRaisesRegex(ForecastError, "invalid monthly horizon"):
             forecast_monthly(CsvMonthlySource().load(), model_factory=Model)
 
+    def test_timeframes_return_one_or_twelve_monthly_projections_and_cache_independently(self):
+        service = ForecastService()
+        monthly = service.get_forecast('monthly')
+        weekly = service.get_forecast('weekly')
+        yearly = service.get_forecast('yearly')
+        self.assertEqual(monthly['forecast'], weekly['forecast'])
+        self.assertEqual(weekly['model']['timeframe'], 'weekly')
+        self.assertEqual(yearly['model']['timeframe'], 'yearly')
+        self.assertEqual(len(yearly['forecast']), 12)
+        self.assertEqual(yearly['forecast'][0]['ds'], '2026-12-01')
+        self.assertEqual(yearly['forecast'][-1]['ds'], '2027-11-01')
+        self.assertEqual(yearly, service.get_forecast('yearly'))
+        with self.assertRaises(ForecastError):
+            service.get_forecast('daily')
+
     def test_api_errors_do_not_expose_file_paths_or_internal_failures(self):
         class Broken:
             def get_forecast(self): raise RuntimeError("private-backend-path")

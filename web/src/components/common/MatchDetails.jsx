@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import useNotifications from '../../hooks/useNotifications';
+import useMarkVisibleRead from '../../hooks/useMarkVisibleRead';
 import request from '../../services/api';
 import { loadPotentialMatch } from '../../services/potentialMatch.mjs';
 import MatchComparison from './MatchComparison';
@@ -9,6 +11,13 @@ export default function MatchDetails({ itemId, table, onMatchLoaded }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const { potentialPairs } = useNotifications();
+  const viewedPairs = useMemo(() => match ? potentialPairs.filter(pair => String(pair.lost_item_id) === String(match.lost_item?.id) && String(pair.found_item_id) === String(match.found_item?.id)) : [], [match, potentialPairs]);
+  const lostRows = useMemo(() => match?.lost_item ? [match.lost_item] : [], [match]);
+  const foundRows = useMemo(() => match?.found_item ? [match.found_item] : [], [match]);
+  useMarkVisibleRead('potential', viewedPairs);
+  useMarkVisibleRead('lost', lostRows);
+  useMarkVisibleRead('found', foundRows);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(''); setMatch(null); onMatchLoaded?.(null);

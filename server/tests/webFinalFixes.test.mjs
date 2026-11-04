@@ -73,14 +73,28 @@ test('authenticated account and mobile APIs enforce roles, ownership and server-
   const message=await (await call('/mobile/data/messages','POST',{conversation_id:own.id,text:'Hello office',sender:'admin'})).json();
   assert.equal(message[0].sender,'user');
   assert.deepEqual(await (await call('/mobile/data/messages?conversation_id=eq.'+otherConversation[0].id)).json(),[]);
-  assert.equal((await call('/users/2/role','PUT',{role:'admin'},sessions.admin)).status,403);
+  for (const session of [sessions.admin, sessions.super]) {
+    for (const role of ['admin', 'student', 'superadmin']) {
+      const response = await call('/users/2/role','PUT',{role},session);
+      assert.equal(response.status,405);
+      assert.match((await response.json()).error,/roles are fixed/i);
+    }
+    assert.equal((await call('/users/2','PUT',{role:'admin',name:'Role injection'},session)).status,400);
+  }
   assert.equal((await call('/users/7/status','PUT',{status:'archived'},sessions.admin)).status,403);
   assert.equal((await call('/users/8/status','PUT',{status:'archived'},sessions.super)).status,403);
-  const promotion=await call('/users/2/role','PUT',{role:'admin'},sessions.super);
-  assert.equal(promotion.status,200); assert.equal((await promotion.json()).role,'admin');
-  assert.equal((await call('/mobile/data/users','GET',undefined,sessions.other)).status,403,'Old role sessions must stop working');
+  assert.equal((await call('/users/7/status','PUT',{status:'archived'},sessions.super)).status,403);
+  assert.equal((await call('/users/8/status','PUT',{status:'archived'},sessions.admin)).status,403);
+  assert.deepEqual((await f.db.query('SELECT name,role,status FROM users WHERE id=2')).rows,[{name:'Campus Two',role:'student',status:'active'}]);
+  assert.equal((await call('/mobile/data/users','GET',undefined,sessions.other)).status,200,'Blocked role changes must preserve the campus account and its session');
   const logged=(await f.db.query("SELECT user_name,details FROM activity_logs WHERE details LIKE '%role: admin%'")).rows;
-  assert.equal(logged.length,1);assert.equal(logged[0].user_name,'Superadmin');
+  assert.equal(logged.length,0,'Rejected role changes must not record a successful promotion');
+  for (const session of [sessions.admin, sessions.super]) {
+    assert.equal((await call('/users/2/status','PUT',{status:'archived'},session)).status,200);
+    assert.equal((await call('/mobile/data/users','GET',undefined,sessions.other)).status,403);
+    assert.equal((await call('/users/2/status','PUT',{status:'active'},session)).status,200);
+    assert.equal((await call('/mobile/data/users','GET',undefined,sessions.other)).status,200);
+  }
   assert.equal((await call('/users/1/status','PUT',{status:'suspended'},sessions.admin)).status,200);
   assert.equal((await call('/mobile/data/users')).status,403);
 });

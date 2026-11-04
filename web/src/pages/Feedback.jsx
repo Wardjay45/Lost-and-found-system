@@ -4,6 +4,8 @@ import { DataRegion, PageHeader } from '../components/common/UI';
 import RecoveryMetrics from '../components/common/RecoveryMetrics';
 import { feedbackApi } from '../services/api';
 import useLiveRefresh from '../hooks/useLiveRefresh';
+import { recoveryTimeLabel } from '../utils/recoveryTime.mjs';
+import { formatDateTime } from '../utils/formatters';
 
 const speeds = ['Under 24 hours', '1–3 days', '4–7 days', '8+ days'];
 
@@ -23,7 +25,7 @@ export default function Feedback() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
-  useLiveRefresh(['feedback', 'item_recoveries'], load);
+  useLiveRefresh(['feedback', 'item_recoveries', 'found_items'], load);
   const filtered = useMemo(() => feedback.filter(row =>
     (kind === 'all' || row.kind === kind) && (rating === 'all' || row.rating === Number(rating)) &&
     (speed === 'all' || row.kind === 'recovery' && row.speed === speed) &&
@@ -51,7 +53,8 @@ export default function Feedback() {
             <span role="img" aria-label={row.rating + ' out of 5 stars'} className="inline-flex gap-1">{[1,2,3,4,5].map(value => <AppIcon key={value} name="star" aria-hidden="true" style={{ width: 16, height: 16, color: '#b7791f', fill: value <= row.rating ? '#b7791f' : 'none' }} />)}</span>
             <span className="text-xs rounded-full px-3 py-1 border border-[var(--lf-30-border)] lf-text-muted">{row.kind === 'recovery' ? 'Recovery experience' : 'General app feedback'}</span>
           </div><time className="text-xs lf-text-muted" dateTime={row.created_at}>{new Date(row.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}</time></div>
-          {row.kind === 'recovery' && <p className="text-sm lf-text-muted"><strong className="lf-text-primary">{row.item_description || 'Recovered item'}</strong> · Measured return time: {row.speed || 'Not available'}</p>}
+          {row.kind === 'recovery' && <p className="text-sm lf-text-muted"><strong className="lf-text-primary">{row.item_description || 'Recovered item'}</strong> · Lost report to found: {recoveryTimeLabel(row.recovery_hours)}</p>}
+          {row.kind === 'recovery' && <p className="text-xs lf-text-muted">Reported lost: {row.reported_at ? formatDateTime(row.reported_at) : 'Not recorded'} · Found: {row.found_at ? formatDateTime(row.found_at) : 'Not recorded'}</p>}
           <p className="text-sm lf-text-primary whitespace-pre-wrap break-words">{row.comment || 'No additional comments.'}</p>
         </article>)}</div>
       </DataRegion>

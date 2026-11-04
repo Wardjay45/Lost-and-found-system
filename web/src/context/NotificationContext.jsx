@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext';
 import request from '../services/api';
 import { notificationEvent, notifyChange, subscribeNotifications } from '../services/liveNotifications.mjs';
 import { acknowledgeRows, parseReadState, unreadRows } from '../../../shared/notifications.mjs';
+import { potentialReadReceipts } from '../../../shared/potentialMatchGroups.mjs';
 
 import Context from './notificationState';
 import { loadNotificationReadState, notificationReadKey } from '../services/notificationReadState.mjs';
@@ -21,6 +22,15 @@ function AccountNotifications({ user, children }) {
   const readRef = useRef(read);
   const [snapshot, setSnapshot] = useState(empty);
   const [error, setError] = useState('');
+  const potentialPairs = snapshot.potential || [];
+  const potentialReady = Array.isArray(snapshot.potential);
+  const potentialRead = potentialReadReceipts(read, potentialPairs);
+  useEffect(() => {
+    if (!potentialReady || Object.hasOwn(readRef.current, 'potential')) return;
+    const next = { ...readRef.current, potential: potentialReadReceipts(readRef.current, snapshot.potential) };
+    readRef.current = next; setRead(next);
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* Keep session receipts. */ }
+  }, [potentialReady, snapshot.potential, key]);
   const markRead = useCallback((kind, rows) => {
     if (document.visibilityState !== 'visible' || !rows?.length) return;
     const before = readRef.current;
@@ -74,11 +84,12 @@ function AccountNotifications({ user, children }) {
     lost: new Set(unreadRows(snapshot.lost, read.lost).map(row => String(row.id))),
     found: new Set(unreadRows(snapshot.found, read.found).map(row => String(row.id))),
   };
-  const counts = { lost: unreadReports.lost.size, found: unreadReports.found.size, messages: unreadMessages.length };
+  const counts = { lost: unreadReports.lost.size, found: unreadReports.found.size, messages: unreadMessages.length,
+    potential: unreadRows(potentialPairs, potentialRead).length };
   // A report row may load before the notification snapshot. Its saved receipt
   // determines whether it was viewed; a pending snapshot must not label it viewed.
-  const viewedReports = { lost: new Set(read.lost || []), found: new Set(read.found || []) };
+  const viewedReports = { lost: new Set(read.lost || []), found: new Set(read.found || []), potential: new Set(potentialRead) };
   const isUnread = (kind, id) => Boolean(viewedReports[kind] && id != null && !viewedReports[kind].has(String(id)));
   const conversationUnread = id => unreadMessages.filter(row => String(row.conversation_id) === String(id)).length;
-  return <Context.Provider value={{ counts, markRead, conversationUnread, isUnread, error }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ counts, markRead, conversationUnread, isUnread, potentialPairs, potentialReady, error }}>{children}</Context.Provider>;
 }

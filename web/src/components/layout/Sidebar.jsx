@@ -4,7 +4,7 @@ import AppIcon from '../common/AppIcon';
 import useNotifications from '../../hooks/useNotifications';
 const groups = [
   { label: 'Workspace', items: [{path:'/',label:'Overview',icon:'dashboard'}, {path:'/analytics',label:'Analytics',icon:'chart'}] },
-  { label: 'Item management', items: [{path:'/items/lost',label:'Lost items',icon:'search',badgeKey:'lost'}, {path:'/items/found',label:'Found items',icon:'box',badgeKey:'found'}, {path:'/matching',label:'Smart matching',icon:'matching'}, {path:'/items/potential-matches',label:'Potential matches',icon:'link'}, {path:'/items/claimed',label:'Claimed items',icon:'success'}, {path:'/unclaimed',label:'Unclaimed items',icon:'clock'}] },
+  { label: 'Item management', items: [{path:'/items/lost',label:'Lost items',icon:'search',badgeKey:'lost'}, {path:'/items/found',label:'Found items',icon:'box',badgeKey:'found'}, {path:'/matching',label:'Smart matching',icon:'matching'}, {path:'/items/potential-matches',label:'Potential matches',icon:'link',badgeKey:'potential'}, {path:'/items/claimed',label:'Claimed items',icon:'success'}, {path:'/unclaimed',label:'Unclaimed items',icon:'clock'}] },
   { label: 'Community', items: [{path:'/messaging',label:'Messages',icon:'messages',badgeKey:'messages'}, {path:'/users',label:'Users',icon:'users'}, {path:'/feedback',label:'Feedback',icon:'star'}] },
   { label: 'Administration', items: [{path:'/categories',label:'Categories',icon:'tag'}, {path:'/qr-locations',label:'Locations',icon:'location'}, {path:'/activity-logs',label:'Activity log',icon:'activity'}, {path:'/settings',label:'Settings',icon:'settings'}] },
 ];
@@ -38,7 +38,7 @@ export default function Sidebar({ isOpen, onClose }) {
       <div className="sidebar-brand"><img src="/logo.png" alt="" /><div><strong>Lost & Found</strong><span>Campus management</span></div><button type="button" className="icon-button sidebar-close" onClick={onClose} aria-label="Close navigation"><AppIcon name="close" /></button></div>
       <nav aria-label="Main navigation" title={error ? 'Notifications temporarily unavailable; retrying automatically' : undefined}>{groups.map(group => <div className="nav-group" key={group.label}><p className="nav-group-label">{group.label}</p>{group.items.map(item => {
         const badge = getBadgeCount(item);
-        return <NavLink key={item.path} to={item.path} end={item.path === '/'} onClick={onClose} className={({isActive}) => `nav-link ${isActive ? 'nav-link-active' : ''}`}><AppIcon name={item.icon} /><span>{item.label}</span>{badge > 0 && <span className="nav-badge" aria-label={badge + (item.badgeKey === 'messages' ? ' unread messages' : ' new reports')} aria-live="polite">{badge > 99 ? '99+' : badge}</span>}</NavLink>;
+        return <NavLink key={item.path} to={item.path} end={item.path === '/'} onClick={onClose} className={({isActive}) => `nav-link ${isActive ? 'nav-link-active' : ''}`}><AppIcon name={item.icon} /><span>{item.label}</span>{badge > 0 && <span className="nav-badge" aria-label={badge + (item.badgeKey === 'messages' ? ' unread messages' : item.badgeKey === 'potential' ? ' unread potential matches' : ' new reports')} aria-live="polite">{badge > 99 ? '99+' : badge}</span>}</NavLink>;
       })}</div>)}</nav>
       <div className="sidebar-footer"><AppIcon name="building" /><div><strong>Campus Lost & Found</strong><span>Admin workspace · v1.0</span></div></div>
     </aside>

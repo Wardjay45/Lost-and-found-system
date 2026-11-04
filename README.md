@@ -42,6 +42,8 @@ npm run dev
 
 The API reads its environment variables from `server/.env` and listens on port 3001 by default. Keep credentials in that ignored file.
 
+For handover evidence, apply `server/add-handover-photo.sql` after `server/add-recovery-feedback.sql` and `server/cancel-potential-match.sql`, before deploying the updated API. New releases require a photo and recorded ownership questions and answers; older claim records remain viewable without these newer fields. Photos are resized in the browser. The API saves the photo, `knowledge_answers`, and separate notes in the protected `item_recoveries` record, in the same transaction as both item statuses and the claim log. Legacy Q&A remains in the original notes.
+
 ## AI service
 
 ```powershell

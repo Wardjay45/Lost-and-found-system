@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 import express from 'express';
-import { createRecoveryFeedbackService, summarizeRecoveries } from '../services/recoveryFeedback.js';
+import { createRecoveryFeedbackService, summarizeRecoveries, recoveryHours } from '../services/recoveryFeedback.js';
 import { createRecoveryFeedbackRouter, createRecoveryClaimHandler } from '../routes/recoveryFeedback.js';
 
 const secret = 'isolated-recovery-feedback-test-secret';
+const handoverImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZcAAAAASUVORK5CYII=';
 const student = { id: 1, name: 'Student', role: 'student', status: 'active', google_subject: 'verified-subject' };
 const admin = { id: 2, name: 'Verifier', role: 'admin', status: 'active' };
 const recovery = { id: '00000000-0000-4000-8000-000000000010', lost_item_id: 10, found_item_id: 20, owner_id: 1, item_description: 'Blue bag', reported_at: '2026-10-01T00:00:00Z', recovered_at: '2026-10-03T00:00:00Z' };
@@ -65,7 +66,7 @@ test('active superadmins retain admin recovery access without gaining student su
   users[1].role = 'superadmin';
   const actor = users[1];
   assert.equal((await service.authorize(token(actor), 'admin')).id, actor.id);
-  assert.equal((await service.claim(actor, 10, { found_item_id: 20, id_verified: true, knowledge_passed: true })).recovery.id, recovery.id);
+  assert.equal((await service.claim(actor, 10, { found_item_id: 20, id_verified: true, knowledge_passed: true, handover_image: handoverImage, knowledge_answers: 'Owner described the blue lining.' })).recovery.id, recovery.id);
   await assert.rejects(service.authorize(token(actor, { role: 'admin' }), 'admin'), error => error.status === 403);
   await assert.rejects(service.authorize(token(actor), 'student'), error => error.status === 403);
   await assert.rejects(service.submit(actor, fields), error => error.status === 403);
@@ -93,14 +94,14 @@ test('general feedback is stored separately; invalid ratings, comments, IDs and 
 });
 
 test('metrics include unrated returns once, exclude invalid durations and all general ratings, and report missing data as null', () => {
-  const records = [recovery, { ...recovery, id: 'second', recovered_at: '2026-10-01T12:00:00Z' }, { ...recovery, id: 'bad', reported_at: null }];
+  const records = [{ ...recovery, found_at: '2026-10-03T00:00:00Z' }, { ...recovery, id: 'second', found_at: '2026-10-01T12:00:00Z' }, { ...recovery, id: 'bad', reported_at: null }];
   const ratings = [{ kind: 'recovery', recovery_id: recovery.id, rating: 5 }, { kind: 'general', rating: 1 }];
   const summary = summarizeRecoveries(records, ratings, '2026-10-01T00:00:00Z');
   assert.equal(summary.confirmed_recoveries, 3);
   assert.equal(summary.valid_durations, 2);
   assert.equal(summary.excluded_durations, 1);
   assert.equal(summary.average_hours, 30);
-  assert.equal(summary.median_hours, 30);
+  assert.equal(Object.hasOwn(summary, 'median_hours'), false);
   assert.equal(summary.satisfaction_percent, 100);
   assert.equal(summary.response_rate_percent, 33.3);
   assert.equal(summary.recovery_responses, 1);
@@ -110,13 +111,19 @@ test('metrics include unrated returns once, exclude invalid durations and all ge
   assert.equal(summarizeRecoveries([], [], null).response_rate_percent, null);
 });
 
+test('recovery speed uses the found-report date rather than handover, and excludes missing/negative durations', () => {
+  assert.equal(recoveryHours({ reported_at: '2026-10-01T00:00:00Z', found_at: '2026-10-01T06:00:00', recovered_at: '2026-10-05T00:00:00Z' }), 6);
+  assert.equal(recoveryHours({ reported_at: '2026-10-01T00:00:00Z', recovered_at: '2026-10-05T00:00:00Z' }), null);
+  assert.equal(recoveryHours({ reported_at: '2026-10-02T00:00:00Z', found_at: '2026-10-01T00:00:00Z' }), null);
+});
+
 test('handover validates admin, IDs and verification fields before invoking the atomic database operation', async () => {
   const { service, repository } = setup();
   let calls = 0;
   repository.completeRecovery = async (actor, lostId, details) => { calls++; assert.equal(actor.id, admin.id); assert.equal(lostId, 10); assert.equal(details.found_item_id, 20); return recovery; };
-  const details = { found_item_id: 20, id_verified: true, knowledge_passed: true, verified_by: 'Forged name' };
+  const details = { found_item_id: 20, id_verified: true, knowledge_passed: true, verified_by: 'Forged name', handover_image: handoverImage, knowledge_answers: 'Owner described the blue lining.' };
   await assert.rejects(service.claim(student, 10, details), error => error.status === 403);
-  for (const invalid of [{ found_item_id: 'bad' }, { id_verified: false }, { knowledge_passed: 'true' }]) await assert.rejects(service.claim(admin, 10, { ...details, ...invalid }), error => error.status === 400);
+  for (const invalid of [{ found_item_id: 'bad' }, { id_verified: false }, { knowledge_passed: 'true' }, { handover_image: null }, { knowledge_answers: '' }, { knowledge_answers: 'N/A' }]) await assert.rejects(service.claim(admin, 10, { ...details, ...invalid }), error => error.status === 400);
   assert.equal(calls, 0);
   assert.equal((await service.claim(admin, 10, details)).recovery.id, recovery.id);
   assert.equal(calls, 1);

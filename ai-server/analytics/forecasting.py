@@ -77,15 +77,17 @@ def prophet_model(**options):
     return Prophet(**options)
 
 
-def forecast_monthly(history, *, model_factory=prophet_model):
+def forecast_monthly(history, *, model_factory=prophet_model, horizon_months=FORECAST_HORIZON_MONTHS):
+    if horizon_months not in (1, 12):
+        raise ForecastError('Choose a supported forecast horizon.', 422)
     data = validate_monthly_history(history.frame)
     model = model_factory(yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=False,
                           interval_width=.8, n_changepoints=min(5, len(data) - 2), uncertainty_samples=1000)
     model.fit(data, seed=42)
-    future = model.make_future_dataframe(periods=FORECAST_HORIZON_MONTHS, freq="MS", include_history=False)
+    future = model.make_future_dataframe(periods=horizon_months, freq="MS", include_history=False)
     predicted = model.predict(future)
-    expected = pd.date_range(data["ds"].max() + pd.offsets.MonthBegin(1), periods=FORECAST_HORIZON_MONTHS, freq="MS")
-    if len(predicted) != FORECAST_HORIZON_MONTHS or list(pd.to_datetime(predicted["ds"])) != list(expected):
+    expected = pd.date_range(data["ds"].max() + pd.offsets.MonthBegin(1), periods=horizon_months, freq="MS")
+    if len(predicted) != horizon_months or list(pd.to_datetime(predicted["ds"])) != list(expected):
         raise ForecastError("The forecasting model returned an invalid monthly horizon.")
 
     def count(value):
@@ -116,7 +118,7 @@ def forecast_monthly(history, *, model_factory=prophet_model):
         warnings.insert(1, "This temporary UBC dataset describes found-item records, not Philippine lost-item statistics.")
     return {"historical": [{"ds": row.ds.strftime("%Y-%m-%d"), "y": int(row.y)} for row in data.itertuples()],
             "forecast": forecasts, "dataset": dataset, "warnings": warnings,
-            "model": {"name": "Prophet", "horizon_months": FORECAST_HORIZON_MONTHS, "frequency": "MS", "yearly_seasonality": False,
+            "model": {"name": "Prophet", "horizon_months": horizon_months, "frequency": "MS", "yearly_seasonality": False,
                       "weekly_seasonality": False, "daily_seasonality": False, "interval_width": .8,
                       "count_floor": 0, "accuracy_evaluated": False},
             "generated_at": datetime.now(timezone.utc).isoformat()}
@@ -129,13 +131,18 @@ class ForecastService:
         self.model_factory = model_factory
         self._lock = Lock()
         self._key = None
-        self._result = None
+        self._results = {}
 
-    def get_forecast(self):
+    def get_forecast(self, timeframe='monthly'):
+        if timeframe not in ('weekly', 'monthly', 'yearly'):
+            raise ForecastError('Choose weekly, monthly or yearly.', 422)
+        horizon = 12 if timeframe == 'yearly' else 1
         with self._lock:
             history = self.source.load()
-            digest = hashlib.sha256((str(FORECAST_HORIZON_MONTHS) + history.frame.to_csv(index=False) + json.dumps(history.dataset, sort_keys=True)).encode()).hexdigest()
+            digest = hashlib.sha256((history.frame.to_csv(index=False) + json.dumps(history.dataset, sort_keys=True)).encode()).hexdigest()
             if digest != self._key:
-                result = forecast_monthly(history, model_factory=self.model_factory)
-                self._result, self._key = result, digest
-            return self._result
+                self._results, self._key = {}, digest
+            if horizon not in self._results:
+                self._results[horizon] = forecast_monthly(history, model_factory=self.model_factory, horizon_months=horizon)
+            result = self._results[horizon]
+            return result if timeframe == 'monthly' else {**result, 'model': {**result['model'], 'timeframe': timeframe}}

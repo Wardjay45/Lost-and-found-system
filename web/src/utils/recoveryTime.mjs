@@ -1,0 +1,1 @@
+export const recoveryTimeLabel = hours => typeof hours !== 'number' || !Number.isFinite(hours) ? 'Not available' : hours < 1 ? (hours * 60).toFixed(1) + ' minutes' : hours < 24 ? hours.toFixed(1) + ' hours' : (hours / 24).toFixed(1) + ' days';

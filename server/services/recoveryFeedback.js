@@ -1,12 +1,16 @@
 import jwt from 'jsonwebtoken';
+import { validateHandoverImage } from './handoverImage.js';
+import { normalizeKnowledgeAnswers } from '../../shared/claimVerification.mjs';
+import { parseStoredTimestamp } from '../../shared/timestamps.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const speeds = ['Under 24 hours', '1–3 days', '4–7 days', '8+ days'];
 const fail = (status, message, code) => { throw Object.assign(new Error(message), { status, code }); };
 
 export function recoveryHours(record) {
-  if (!record?.reported_at || !record?.recovered_at) return null;
-  const hours = (Date.parse(record.recovered_at) - Date.parse(record.reported_at)) / 3600000;
+  const reported = parseStoredTimestamp(record?.reported_at), found = parseStoredTimestamp(record?.found_at);
+  if (!reported || !found) return null;
+  const hours = (found.getTime() - reported.getTime()) / 3600000;
   return Number.isFinite(hours) && hours >= 0 ? hours : null;
 }
 
@@ -35,7 +39,6 @@ export function summarizeRecoveries(records, feedback, startedAt) {
     valid_durations: hours.length,
     excluded_durations: unique.length - hours.length,
     average_hours: average(hours),
-    median_hours: hours.length ? (hours[Math.floor((hours.length - 1) / 2)] + hours[Math.floor(hours.length / 2)]) / 2 : null,
     recovery_responses: responses.length,
     general_responses: feedback.filter(row => row.kind === 'general').length,
     average_rating: average(responses.map(row => row.rating)),
@@ -100,7 +103,7 @@ export function createRecoveryFeedbackService({ repository, jwtSecret }) {
     return feedback.map(row => {
       const recovery = returns.get(row.recovery_id);
       const hours = recovery ? recoveryHours(recovery) : null;
-      return { ...row, item_description: recovery?.item_description || null, recovery_hours: hours, speed: recoverySpeed(hours) };
+      return { ...row, item_description: recovery?.item_description || null, reported_at: recovery?.reported_at || null, found_at: recovery?.found_at || null, recovery_hours: hours, speed: recoverySpeed(hours) };
     }).sort((first, second) => Date.parse(second.created_at) - Date.parse(first.created_at));
   }
 
@@ -111,12 +114,15 @@ export function createRecoveryFeedbackService({ repository, jwtSecret }) {
 
   async function claim(actor, lostId, fields = {}) {
     if (!['admin', 'superadmin'].includes(actor.role)) fail(403, 'Administrator access is required.');
+    const knowledgeAnswers = normalizeKnowledgeAnswers(fields.knowledge_answers);
+    if (!knowledgeAnswers) fail(400, 'Record the ownership questions and answers before releasing the item (up to 1,000 characters).');
+    if (!validateHandoverImage(fields.handover_image)) fail(400, 'Upload a handover photo before releasing the item. Use a JPEG, PNG or WebP image up to 1 MB.');
     if (!Number.isSafeInteger(Number(lostId)) || Number(lostId) <= 0 || !Number.isSafeInteger(Number(fields.found_item_id)) || Number(fields.found_item_id) <= 0 ||
         fields.id_verified !== true || fields.knowledge_passed !== true || fields.notes !== undefined && (typeof fields.notes !== 'string' || fields.notes.length > 1000)) {
       fail(400, 'Select the matched item and complete school ID and knowledge verification. Notes must be at most 1,000 characters.');
     }
     try {
-      const recovery = await repository.completeRecovery(actor, Number(lostId), { found_item_id: Number(fields.found_item_id), notes: fields.notes || '' });
+      const recovery = await repository.completeRecovery(actor, Number(lostId), { found_item_id: Number(fields.found_item_id), notes: fields.notes || '', handover_image: fields.handover_image, knowledge_answers: knowledgeAnswers });
       return { success: true, recovery, lost_item: { id: recovery.lost_item_id, status: 'claimed', resolved_date: recovery.recovered_at }, message: 'Item returned. Verified handover recorded.' };
     } catch (error) {
       if (error.code === 'P0001' || error.code === '23505') fail(409, error.code === '23505' ? 'This item has already been returned.' : error.message);

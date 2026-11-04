@@ -43,3 +43,28 @@ test('forecast proxy requires an active admin, forwards to Python, validates res
 test('both local and public server entry points mount the forecast API', () => {
   for (const entry of ['app.js', 'start-public.js']) assert.match(readFileSync(new URL('../' + entry, import.meta.url), 'utf8'), /app\.use\('\/api\/analytics', analyticsRouter\)/);
 });
+
+test('forecast timeframes forward to Python and reject unsupported or mismatched horizons', async t => {
+  const actor = { id: 7, role: 'admin', status: 'active' };
+  const client = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: actor, error: null }) }) }) }) };
+  let wrongHorizon = false;
+  const app = express();
+  app.use('/api/analytics', createAnalyticsRouter({ client, jwtSecret: secret, fetcher: async url => {
+    const timeframe = new URL(url).searchParams.get('timeframe') || 'monthly';
+    const horizon = timeframe === 'yearly' && !wrongHorizon ? 12 : 1;
+    return { ok: true, status: 200, json: async () => ({ ...result,
+      model: { ...result.model, timeframe, horizon_months: horizon },
+      forecast: Array.from({ length: horizon }, (_, index) => ({ ...result.forecast[0], ds: new Date(Date.UTC(2026, 11 + index, 1)).toISOString().slice(0, 10) })),
+    }) };
+  } }));
+  const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = 'http://127.0.0.1:' + server.address().port + '/api/analytics/forecast?timeframe=';
+  const headers = { Authorization: 'Bearer ' + jwt.sign({ id: 7, role: 'admin' }, secret) };
+  for (const timeframe of ['weekly', 'monthly', 'yearly']) {
+    const response = await fetch(base + timeframe, { headers }); assert.equal(response.status, 200);
+    assert.equal((await response.json()).forecast.length, timeframe === 'yearly' ? 12 : 1);
+  }
+  assert.equal((await fetch(base + 'daily', { headers })).status, 400);
+  wrongHorizon = true; assert.equal((await fetch(base + 'yearly', { headers })).status, 503);
+});

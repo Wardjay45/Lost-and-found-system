@@ -9,11 +9,12 @@ function database() {
   let onRemoved;
   const whenRemoved = new Promise(resolve => { onRemoved = resolve; });
   const state = { user: { role: 'admin', status: 'active' }, fail: false, callbacks: {}, removed: 0, subscriptions: 0, whenRemoved,
-    rows: { lost_items: [{ id: 1 }], found_items: [{ id: 2 }], messages: [{ id: 3, conversation_id: '7', sender: 'user' }, { id: 4, conversation_id: '7', sender: 'admin' }] } };
+    rows: { lost_items: [{ id: 1 }], found_items: [{ id: 2 }], activity_logs: [], matches: [], messages: [{ id: 3, conversation_id: '7', sender: 'user' }, { id: 4, conversation_id: '7', sender: 'admin' }] } };
   const db = { from(table) {
     let filter;
     return {
       select() { return this; }, order() { return this; }, eq(column, value) { filter = [column, value]; return this; },
+      in() { return this; },
       async single() { return { data: state.user, error: null }; },
       async range(start, end) {
         if (state.fail) return { data: null, error: Error('offline') };
@@ -46,6 +47,14 @@ test('snapshot includes all report statuses, incoming messages only, and every d
   assert.deepEqual(snapshot.messages.map(row => row.id), [3]);
   state.fail = true;
   await assert.rejects(notificationSnapshot(db), /offline/);
+});
+
+test('pending snapshot identifies a linked lost and found report as one match', async () => {
+  const { db, state } = database();
+  state.rows.lost_items[0].status = 'potential_match'; state.rows.found_items[0].status = 'potential_match';
+  state.rows.activity_logs.push({ id: 10, action: 'match', details: '{"lost_item_id":1,"found_item_id":2}' });
+  const snapshot = await notificationSnapshot(db);
+  assert.deepEqual(snapshot.potential, [{ id: 'pair:1:2:log:10', lost_item_id: '1', found_item_id: '2' }]);
 });
 test('snapshot API enforces current admin status and returns failure instead of zero counts', async t => {
   const { state, url, headers } = await appFor(t);

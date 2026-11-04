@@ -189,7 +189,7 @@ ON CONFLICT DO NOTHING;
 
 -- Seed Users
 INSERT INTO users (name, email, password, student_id, phone, department, role, status) VALUES
-('Admin User', 'admin@lostandfound.edu', '$2b$10$placeholder', 'ADMIN-001', '+63 900 000 0000', 'Administration', 'superadmin', 'active'),
+('Admin User', 'admin@lostandfound.edu', '$2b$10$placeholder', 'ADMIN-001', '+63 900 000 0000', 'Administration', 'admin', 'active'),
 ('Maria Santos', 'maria.santos@university.edu', '$2b$10$placeholder', '2021-0001', '+63 912 345 6789', 'College of Engineering', 'student', 'active'),
 ('Juan Dela Cruz', 'juan.dcruz@university.edu', '$2b$10$placeholder', '2022-0042', '+63 917 890 1234', 'College of Science', 'student', 'active'),
 ('Ana Gonzales', 'ana.gonzales@university.edu', '$2b$10$placeholder', '2021-0088', '+63 915 678 9012', 'College of Arts & Letters', 'student', 'active'),

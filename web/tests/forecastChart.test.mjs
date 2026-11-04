@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildForecastChart } from '../src/services/forecastChart.mjs';
-import { validateForecastResponse } from '../../shared/forecast.mjs';
+import { validateForecastResponse, forecastTimeframeSummary } from '../../shared/forecast.mjs';
 
 const missingMonths = Array.from({ length: 28 }, (_, index) => new Date(Date.UTC(2024, 6 + index, 1)).toISOString().slice(0, 10));
 
@@ -11,6 +11,19 @@ const result = {
   dataset: { name: 'UBC found-item records', description: 'Temporary demonstration', source: 'Supplied CSV', temporary: true, observed_months: 3, total_records: 10, first_observed_month: '2024-05-01', last_observed_month: '2026-11-01', missing_month_count: 28, missing_months: missingMonths },
   warnings: ['Experimental'], model: { name: 'Prophet', horizon_months: 1, yearly_seasonality: false, interval_width: .8 },
 };
+
+test('timeframes prorate seven days, retain one month and total twelve projected months', () => {
+  const month = forecastTimeframeSummary(result);
+  assert.equal(month.yhat, 8); assert.equal(month.end, '2026-12-31');
+  const weekly = { ...result, model: { ...result.model, timeframe: 'weekly' } };
+  const week = forecastTimeframeSummary(weekly, 'weekly');
+  assert.equal(week.end, '2026-12-07'); assert.equal(week.yhat, 8 * 7 / 31);
+  const year = { ...result, model: { ...result.model, timeframe: 'yearly', horizon_months: 12 }, forecast: Array.from({ length: 12 }, (_, index) => ({ ...result.forecast[0], ds: new Date(Date.UTC(2026, 11 + index, 1)).toISOString().slice(0, 10), yhat: index + 1 })) };
+  const annual = forecastTimeframeSummary(year, 'yearly');
+  assert.equal(annual.yhat, 78); assert.equal(annual.end, '2027-11-30'); assert.equal(annual.yhat_lower, null);
+  assert.equal(buildForecastChart(year, { recentMonths: 6 }).months.length, 18);
+  assert.throws(() => validateForecastResponse(result, { timeframe: 'weekly' }), /invalid response/);
+});
 test('forecast chart preserves actual zeros, uses null for absent months, and distinguishes estimates and their range', () => {
   const chart = buildForecastChart(validateForecastResponse(result));
   assert.equal(chart.months.length, 32);

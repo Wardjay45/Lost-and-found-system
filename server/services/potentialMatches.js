@@ -6,7 +6,7 @@ const storedStatuses = ['confirmed', 'matched', 'potential_match'];
 
 // Read explicit associations only. A report status or a nearby timestamp cannot
 // identify which opposite report the administrator selected.
-export async function loadSavedPotentialMatch(client, itemId, table) {
+export async function loadSavedPotentialMatch(client, itemId, table, { includeClaimed = false } = {}) {
   const id = reportId(itemId);
   if (!id || !['lost_items', 'found_items'].includes(table)) throw Object.assign(new Error('Choose a valid lost or found report.'), { status: 400 });
   const logs = await readAll(client.from('activity_logs').select('*').in('action', ['match', 'unmatch']).order('timestamp', { ascending: false }).order('id', { ascending: false }));
@@ -14,7 +14,7 @@ export async function loadSavedPotentialMatch(client, itemId, table) {
   const recorded = findRecordedPair(logs, id, table);
   let pair = recorded;
   if (!pair) {
-    const rows = await readAll(client.from('matches').select('id,lost_item_id,found_item_id,confidence,status,date_created').in('status', storedStatuses));
+    const rows = await readAll(client.from('matches').select('id,lost_item_id,found_item_id,confidence,status,date_created').in('status', includeClaimed ? [...storedStatuses, 'claimed'] : storedStatuses));
     const field = table === 'lost_items' ? 'lost_item_id' : 'found_item_id';
     const candidates = rows.filter(row => reportId(row[field]) === id && reportId(row.lost_item_id) && reportId(row.found_item_id));
     if (!candidates.length) return null;
@@ -27,6 +27,11 @@ export async function loadSavedPotentialMatch(client, itemId, table) {
   const lostLink = findRecordedPair(logs, pair.lostId, 'lost_items');
   const foundLink = findRecordedPair(logs, pair.foundId, 'found_items');
   if ((lostLink && lostLink.foundId !== pair.foundId) || (foundLink && foundLink.lostId !== pair.lostId)) fail('The saved item association has changed. Refresh before releasing the item.');
+  return loadReportPair(client, pair);
+}
+
+// Shared by pending review and the immutable association in a completed handover.
+export async function loadReportPair(client, pair) {
   const fetchReport = async (source, report) => {
     const columns = source === 'lost_items'
       ? 'id,item_id,status,description,category_name,location_lost,location_details,reporter_name,reporter_id,image,date_reported,last_updated'

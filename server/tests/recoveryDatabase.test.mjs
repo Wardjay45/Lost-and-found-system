@@ -9,6 +9,7 @@ import { createRecoveryFeedbackRouter, createRecoveryClaimHandler } from '../rou
 
 const migration = readFileSync(new URL('../add-recovery-feedback.sql', import.meta.url), 'utf8');
 const schema = readFileSync(new URL('../../supabase-schema.sql', import.meta.url), 'utf8');
+const handoverImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZcAAAAASUVORK5CYII=';
 
 async function database(t) {
   const db = new PGlite();
@@ -19,6 +20,7 @@ async function database(t) {
     await db.exec(`CREATE TABLE ${table} (${columns});`);
   }
   await db.exec(migration);
+  await db.exec(readFileSync(new URL('../add-handover-photo.sql', import.meta.url), 'utf8'));
   await db.exec('GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role; GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;');
   await db.exec(`INSERT INTO users(id,name,email,password,role,status) VALUES (1,'Owner','owner@dnsc.edu.ph','isolated-test-only','student','active'), (2,'Admin','admin@dnsc.edu.ph','isolated-test-only','admin','active');
     INSERT INTO lost_items(id,item_id,description,location_lost,reporter_id,status,date_reported) VALUES (10,'L10','Blue bag','Library',1,'potential_match','2026-10-01T00:00:00');
@@ -118,7 +120,7 @@ test('end-to-end isolated flow persists a handover, student feedback and admin m
     feedback: async owner => (await db.query('SELECT * FROM feedback' + (owner === undefined ? '' : ' WHERE user_id=$1'), owner === undefined ? [] : [owner])).rows,
     trackingStart: async () => (await db.query('SELECT started_at FROM recovery_tracking')).rows[0].started_at,
     insertFeedback: async row => (await db.query('INSERT INTO feedback(user_id,user_name,kind,recovery_id,rating,comment,request_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *', [row.user_id,row.user_name,row.kind,row.recovery_id,row.rating,row.comment,row.request_id])).rows[0],
-    completeRecovery: async (actor, lostId, details) => (await db.query('SELECT complete_item_recovery($1,$2,$3,$4) AS recovery', [lostId, details.found_item_id, actor.id, details.notes])).rows[0].recovery,
+    completeRecovery: async (actor, lostId, details) => (await db.query('SELECT complete_item_recovery_with_evidence($1,$2,$3,$4,$5,$6) AS recovery', [lostId, details.found_item_id, actor.id, details.notes, details.handover_image, details.knowledge_answers])).rows[0].recovery,
   };
   const secret = 'isolated-e2e-server-secret';
   const service = createRecoveryFeedbackService({ repository, jwtSecret: secret });
@@ -138,7 +140,7 @@ test('end-to-end isolated flow persists a handover, student feedback and admin m
     assert.ok(response.ok, JSON.stringify(data));
     return data;
   }
-  const claimed = await call('/lost-items/10/claim', admin, { found_item_id: 20, id_verified: true, knowledge_passed: true });
+  const claimed = await call('/lost-items/10/claim', admin, { found_item_id: 20, id_verified: true, knowledge_passed: true, handover_image: handoverImage, knowledge_answers: 'Owner described the blue lining.' });
   assert.equal((await call('/feedback/recoveries', owner))[0].feedback, null);
   await call('/feedback', owner, { kind: 'recovery', recovery_id: claimed.recovery.id, rating: 5, comment: 'Helpful', request_id: '00000000-0000-4000-8000-000000000001' });
   await call('/feedback', owner, { kind: 'general', rating: 1, comment: 'Please improve search', request_id: '00000000-0000-4000-8000-000000000002' });
@@ -149,6 +151,6 @@ test('end-to-end isolated flow persists a handover, student feedback and admin m
   assert.equal(summary.response_rate_percent, 100);
   assert.equal(summary.general_responses, 1);
   assert.equal((await call('/feedback', admin)).length, 2);
-  const replay = await call('/lost-items/10/claim', admin, { found_item_id: 20, id_verified: true, knowledge_passed: true });
+  const replay = await call('/lost-items/10/claim', admin, { found_item_id: 20, id_verified: true, knowledge_passed: true, handover_image: handoverImage, knowledge_answers: 'Owner described the blue lining.' });
   assert.equal(replay.recovery.recovered_at, claimed.recovery.recovered_at);
 });

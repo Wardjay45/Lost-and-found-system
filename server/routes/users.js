@@ -22,8 +22,7 @@ export function createUsersRouter({ client = supabase, jwtSecret = () => process
   };
   function canManage(actor, target) {
     if (Number(actor.id) === Number(target.id)) fail(403, 'You cannot change your own account access here.');
-    if (target.role === 'superadmin') fail(403, 'Superadmin accounts are protected.');
-    if (actor.role !== 'superadmin' && target.role !== 'student') fail(403, 'Only a superadmin can manage administrator accounts.');
+    if (target.role !== 'student') fail(403, 'Admin accounts are protected.');
   }
   const save = async (id, target, updates) => {
     const { data, error } = await client.from('users').update(updates).eq('id', id)
@@ -51,16 +50,13 @@ export function createUsersRouter({ client = supabase, jwtSecret = () => process
     res.json(await save(id, target, { status: req.body.status }));
   }));
   router.put('/:id/role', handle(async (req, res) => {
-    if (req.actor.role !== 'superadmin') fail(403, 'Only a superadmin can assign roles.');
-    const id = userId(req.params.id), target = await getUser(id);
-    canManage(req.actor, target);
-    if (!['student', 'admin'].includes(req.body?.role)) fail(400, 'Choose a campus user or administrator role.');
-    res.json(await save(id, target, { role: req.body.role }));
+    res.status(405).json({ error: 'Account roles are fixed. Role changes are not available.' });
   }));
   router.put('/:id', handle(async (req, res) => {
     const id = userId(req.params.id), target = await getUser(id);
     canManage(req.actor, target);
-    if (req.body.role !== undefined || req.body.status !== undefined) fail(400, 'Use the account role or status action to change access.');
+    if (req.body.role !== undefined) fail(400, 'Account roles are fixed and cannot be changed.');
+    if (req.body.status !== undefined) fail(400, 'Use the account status action to change access.');
     const updates = {};
     for (const key of ['name','email','phone','department','student_id']) {
       if (req.body[key] !== undefined) {

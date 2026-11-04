@@ -5,6 +5,7 @@ import { readAll } from '../services/readAll.js';
 import { normalizeActivityAction } from '../../shared/activityLogs.mjs';
 import { findRecordedPair } from '../../shared/potentialMatches.mjs';
 import { loadSavedPotentialMatch } from '../services/potentialMatches.js';
+import { loadClaimDetails } from '../services/claimDetails.js';
 import { normalizeMatchScore } from '../../shared/matchingScores.mjs';
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
@@ -45,6 +46,9 @@ export function createActivityLogsRouter({ client = supabase, jwtSecret = () => 
   }));
   router.get('/match/:table/:id', handle(async (req, res) => {
     res.json({ match: await loadSavedPotentialMatch(client, req.params.id, req.params.table) });
+  }));
+  router.get('/claim/:table/:id', handle(async (req, res) => {
+    res.set('Cache-Control', 'no-store').json(await loadClaimDetails(client, req.params.id, req.params.table));
   }));
   // Serialize decisions in this server so overlapping admin clicks cannot overwrite
   // one another between saving the association and changing report statuses.

@@ -5,6 +5,7 @@ import { activityLogsApi } from '../services/api';
 import useLiveRefresh from '../hooks/useLiveRefresh';
 import { activityView, activityTypes, filterActivities } from '../../../shared/activityLogs.mjs';
 import { formatCampusDateTime } from '../../../shared/timestamps.mjs';
+import { accountRoleLabel } from '../../../shared/roles.mjs';
 
 const PAGE_SIZE = 25;
 
@@ -72,7 +73,7 @@ export default function ActivityLogs() {
                   </div>
                   <p className="mt-1 text-sm lf-text-primary whitespace-pre-wrap break-words">{view.summary}</p>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs lf-text-muted">
-                    <span>By {log.user_name || 'Not recorded'}{log.role ? ` · ${log.role}` : ''}</span>
+                    <span>By {log.user_name || 'Not recorded'}{log.role ? ` · ${accountRoleLabel(log.role)}` : ''}</span>
                     <time dateTime={view.timestamp || undefined}>{formatCampusDateTime(view.timestamp)}</time>
                   </div>
                   {hasDetails && <button type="button" className="ui-button ui-button-secondary mt-3" aria-expanded={open} aria-controls={`activity-details-${log.id}`} onClick={() => setExpanded(open ? null : log.id)}>

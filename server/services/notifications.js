@@ -2,14 +2,23 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { readAll } from './readAll.js';
 import { adminLiveTables } from '../../shared/adminLiveTables.mjs';
+import { potentialMatchGroups } from '../../shared/potentialMatchGroups.mjs';
 
 export async function notificationSnapshot(db) {
   const [lost, found, messages] = await Promise.all([
-    readAll(db.from('lost_items').select('id').order('id')),
-    readAll(db.from('found_items').select('id').order('id')),
-    readAll(db.from('messages').select('id, conversation_id').eq('sender', 'user').order('id')),
+    readAll(db.from('lost_items').select('id,status').order('id')),
+    readAll(db.from('found_items').select('id,status').order('id')),
+    readAll(db.from('messages').select('id,conversation_id').eq('sender', 'user').order('id')),
   ]);
-  return { lost, found, messages };
+  let potential = [];
+  if ([...lost, ...found].some(row => row.status === 'potential_match')) {
+    const [logs, matches] = await Promise.all([
+      readAll(db.from('activity_logs').select('id,action,details,timestamp').in('action', ['match', 'unmatch']).order('id')),
+      readAll(db.from('matches').select('id,lost_item_id,found_item_id,status').in('status', ['confirmed', 'matched', 'potential_match']).order('id')),
+    ]);
+    potential = potentialMatchGroups(lost, found, logs, matches);
+  }
+  return { lost, found, messages, potential };
 }
 
 // One database subscription for all connected admin browsers. Only invalidations

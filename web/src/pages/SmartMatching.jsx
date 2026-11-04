@@ -5,6 +5,8 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import useLiveRefresh from '../hooks/useLiveRefresh';
 import Modal from '../components/common/Modal';
 import MatchComparison from '../components/common/MatchComparison';
+import HandoverPhotoInput from '../components/common/HandoverPhotoInput';
+import { normalizeKnowledgeAnswers } from '../../../shared/claimVerification.mjs';
 import ItemDescription from '../components/common/ItemDescription';
 import { categoriesApi, activityLogsApi } from '../services/api';
 import { recordPotentialMatch } from '../services/recordPotentialMatch.mjs';
@@ -26,6 +28,7 @@ export default function SmartMatching() {
   const [claimMatch, setClaimMatch] = useState(null);
   const [claimForm, setClaimForm] = useState({ verifiedBy: '', idVerified: true, knowledgePassed: true, notes: '' });
   const [claiming, setClaiming] = useState(false);
+  const [preparingPhoto, setPreparingPhoto] = useState(false);
   const [markingMatch, setMarkingMatch] = useState(null);
   const markingRef = useRef(false);
   const loadingRef = useRef(false);
@@ -126,9 +129,6 @@ export default function SmartMatching() {
             {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
         </div></>} />
-      {pageError && <ErrorState message={pageError} onRetry={loadMatches} />}
-      {loading && <LoadingState label="Loading matching results..." />}
-
       {/* Adjustable Percentage Slider */}
       <div className="ui-panel p-5 mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -183,11 +183,9 @@ export default function SmartMatching() {
 
       {/* Match Results */}
       {loading ? (
-        <div className="text-center py-16 text-gray-500 dark:text-gray-400 ui-empty">
-          <p className="text-3xl mb-3 animate-pulse"><AppIcon name="matching" /></p>
-          <p className="font-medium">Running AI matching...</p>
-          <p className="text-sm mt-1">Comparing all lost items against found items</p>
-        </div>
+        <LoadingState label="Loading matching results..." />
+      ) : pageError ? (
+        <ErrorState message={pageError} onRetry={loadMatches} />
       ) : filteredMatches.length === 0 ? (
         <div className="text-center py-16 text-gray-500 dark:text-gray-400 ui-empty">
           <p className="text-3xl mb-3"><AppIcon name="box" /></p>
@@ -354,7 +352,7 @@ export default function SmartMatching() {
                           // 5. Remove from Smart Matching list & show toast
                           setMatches(current => current.filter(m => m.lost_item?.id !== match.lost_item?.id && m.found_item?.id !== match.found_item?.id));
                           void loadMatches({ background: true });
-                          showToast('Go to Lost Items → filter by "Potential Match" → click View → complete Face-to-Face Verification.', 'success', 'Marked as Potential Match');
+                          showToast('Open Potential matches → View details to verify ownership and release the item.', 'success', 'Marked as Potential Match');
                         } catch (e) {
                           showToast(e.message || 'Unable to record the decision.', 'error');
                           void loadMatches({ background: true });
@@ -434,12 +432,19 @@ export default function SmartMatching() {
               </label>
 
               <div>
-                <label htmlFor="field-smartmatching-1" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Admin Name *</label>
-                <input id="field-smartmatching-1" aria-label="Admin Name *"
+                <label htmlFor="smart-claim-answers" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Ownership questions and answers *</label>
+                <textarea id="smart-claim-answers" aria-label="Student answers" aria-required="true" className="ui-input w-full" rows={4} maxLength={1000} placeholder="Record the questions asked and the student's answers" value={claimForm.knowledgeAnswers || ''} onChange={event => setClaimForm(current => ({ ...current, knowledgeAnswers: event.target.value }))} />
+              </div>
+
+              <HandoverPhotoInput value={claimForm.handoverImage} onChange={image => setClaimForm(current => ({ ...current, handoverImage: image }))} onBusyChange={setPreparingPhoto} disabled={claiming} />
+
+              <div>
+                <label htmlFor="field-smartmatching-1" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Admin in charge *</label>
+                <input id="field-smartmatching-1" aria-label="Admin in charge"
                   type="text"
                   value={claimForm.verifiedBy}
                   onChange={(e) => setClaimForm({ ...claimForm, verifiedBy: e.target.value })}
-                  placeholder="e.g. Admin User"
+                  placeholder="Enter the name of the admin in charge"
                   className="ui-input w-full placeholder-gray-400"
                 />
               </div>
@@ -459,7 +464,11 @@ export default function SmartMatching() {
             <div className="flex gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
               <button type="button"
                 onClick={async () => {
-                  if (!claimForm.verifiedBy.trim()) return showToast('Please enter the admin name', 'warning');
+                  if (!normalizeKnowledgeAnswers(claimForm.knowledgeAnswers)) return showToast('Record the ownership questions and answers before releasing the item.', 'warning');
+                  if (!claimForm.handoverImage || preparingPhoto) return showToast('Upload a handover photo before releasing the item.', 'warning');
+                  if (!claimForm.verifiedBy.trim()) return showToast('Please enter the name of the admin in charge', 'warning');
+                  if (!claimForm.idVerified) return showToast('Please verify the school ID first.', 'warning');
+                  if (!claimForm.knowledgePassed) return showToast('Please confirm the knowledge check passed.', 'warning');
                   setClaiming(true);
                   try {
                     const res = await authenticatedFetch(`${API_URL}/lost-items/${claimMatch.lost_item?.id}/claim`, {
@@ -468,6 +477,8 @@ export default function SmartMatching() {
                       body: JSON.stringify({
                         found_item_id: claimMatch.found_item?.id,
                         verified_by: claimForm.verifiedBy,
+                        handover_image: claimForm.handoverImage,
+                        knowledge_answers: claimForm.knowledgeAnswers.trim(),
                         id_verified: claimForm.idVerified,
                         knowledge_passed: claimForm.knowledgePassed,
                         notes: claimForm.notes,
@@ -488,7 +499,7 @@ export default function SmartMatching() {
                     setClaiming(false);
                   }
                 }}
-                disabled={claiming || !claimForm.verifiedBy.trim()}
+                disabled={claiming || preparingPhoto}
                 className="ui-button ui-button-success flex-1 disabled:opacity-50"
               >
                 {claiming ? 'Processing...' : "Approve & Release Item"}

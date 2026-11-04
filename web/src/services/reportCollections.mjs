@@ -25,7 +25,8 @@ export async function loadReportCollection(collection, { lostItemsApi, foundItem
 
 export function filterReportCollection(reports, { reportType = 'all', search = '' } = {}) {
   const query = search.trim().toLowerCase();
-  return reports.filter(item => (reportType === 'all' || item.reportType === reportType) && (!query ||
-    [item.description, item.item_id, item.id, item.category_name, item.reportLocation, item.location_details, item.reportedBy]
+  return reports.filter(item => (reportType === 'all' || item.reportType === reportType || item.pairedItem?.reportType === reportType) && (!query ||
+    [item.description, item.item_id, item.id, item.category_name, item.reportLocation, item.location_details, item.reportedBy,
+      item.pairedItem?.description, item.pairedItem?.item_id, item.pairedItem?.category_name, item.pairedItem?.reportLocation, item.pairedItem?.location_details, item.pairedItem?.reportedBy]
       .some(value => String(value ?? '').toLowerCase().includes(query))));
 }
