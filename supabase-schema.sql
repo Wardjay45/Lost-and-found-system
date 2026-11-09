@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS lost_items (
   image_color TEXT DEFAULT 'bg-blue-100',
   image_icon TEXT DEFAULT '🔍',
   resolved_date TIMESTAMP,
-  cancel_reason TEXT
+  cancel_reason TEXT,
+  cancellation_actor JSONB
 );
 
 -- 4. FOUND ITEMS TABLE
@@ -83,7 +84,8 @@ CREATE TABLE IF NOT EXISTS found_items (
   image_color TEXT DEFAULT 'bg-green-100',
   image_icon TEXT DEFAULT '📦',
   resolved_date TIMESTAMP,
-  cancel_reason TEXT
+  cancel_reason TEXT,
+  cancellation_actor JSONB
 );
 
 -- CREATE TABLE IF NOT EXISTS does not upgrade databases created before this field.

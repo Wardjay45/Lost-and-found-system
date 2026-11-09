@@ -40,6 +40,8 @@ function view(path, { theme = 'dark', data = reports, accessibility = {} } = {})
     plugins: [require.resolve('@babel/plugin-transform-react-jsx'), require.resolve('@babel/plugin-transform-modules-commonjs')],
   }).code;
   const context = vm.createContext({ exports: {}, console, require(name) {
+    if (name.includes('ProfileAvatar')) return { default: 'ProfileAvatar', __esModule: true };
+    if (name.includes('ReportCancellation')) return { default: 'ReportCancellation', __esModule: true };
     if (name.includes('ReportSuccessSheet')) return { default: 'ReportSuccessSheet', __esModule: true };
     if (name.includes('LiveDataContext')) return { useLiveRefresh() {} };
     if (name === 'react') return react;

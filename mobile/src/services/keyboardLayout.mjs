@@ -1,6 +1,6 @@
-export function keyboardOverlap(top, height, keyboard) {
+export function keyboardOverlap(top, height, keyboard, windowScreenOffset = 0) {
   if (!keyboard || !Number.isFinite(keyboard.screenY) || !(keyboard.height > 0) || !(height > 0)) return 0;
-  return Math.max(0, Math.min(height, top + height - keyboard.screenY));
+  return Math.max(0, Math.min(height, top + height + windowScreenOffset - keyboard.screenY));
 }
 export function focusedFieldScroll({ fieldTop, fieldHeight, viewportTop, viewportHeight, keyboardTop, offset, gap = 24 }) {
   const visibleBottom = Math.min(viewportTop + viewportHeight, keyboardTop ?? Infinity) - gap;

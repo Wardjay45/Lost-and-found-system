@@ -15,6 +15,7 @@ import useReportLocations from '../hooks/useReportLocations';
 import PotentialMatchReview from '../components/common/PotentialMatchReview';
 import { formatDate, formatDateTime } from '../utils/formatters';
 import CategoryIcon from '../components/common/CategoryIcon';
+import ReportCancellation from '../components/common/ReportCancellation';
 
 export default function FoundItems() {
   const { isUnread } = useNotifications();
@@ -105,7 +106,7 @@ export default function FoundItems() {
         item.id === itemId ? { ...item, status: 'active' } : item
       ));
       setSelectedItem(null);
-      setApproveMsg('✅ Found item approved and activated!');
+      setApproveMsg('✅ OSDS receipt confirmed. The found item is now active.');
     } catch (err) {
       setApproveMsg(`❌ ${err.message}`);
     }
@@ -117,10 +118,8 @@ export default function FoundItems() {
     setCancelling(true);
     setCancelError('');
     try {
-      await foundItemsApi.updateStatus(cancelItem.id, 'cancelled', cancelReason.trim());
-      setItems(prev => prev.map(item =>
-        item.id === cancelItem.id ? { ...item, status: 'cancelled', cancel_reason: cancelReason.trim() } : item
-      ));
+      const cancelled = await foundItemsApi.updateStatus(cancelItem.id, 'cancelled', cancelReason.trim());
+      setItems(prev => prev.map(item => item.id === cancelled.id ? cancelled : item));
       setShowCancelModal(false);
       setCancelReason('');
       setCancelItem(null);
@@ -355,12 +354,7 @@ export default function FoundItems() {
               <div><p className="text-xs text-gray-500">Last Updated</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(selectedItem.last_updated || selectedItem.lastUpdated)}</p></div>
               <div className="col-span-full"><p className="text-xs text-gray-500">Additional Info</p><p className="text-sm font-medium lf-text-primary whitespace-pre-wrap break-words">{selectedItem.location_details?.trim() || 'No additional information provided.'}</p></div>
             </div>
-            {selectedItem.status === 'cancelled' && selectedItem.cancel_reason && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-lg">
-                <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-0.5">Cancellation Reason</p>
-                <p className="text-sm text-red-700 dark:text-red-300">{selectedItem.cancel_reason}</p>
-              </div>
-            )}
+            {selectedItem.status === 'cancelled' && <ReportCancellation key={selectedItem.id} report={selectedItem} kind="Found" />}
             {(selectedItem.resolved_date || selectedItem.resolvedDate) && (
               <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-lg">
                 <p className="text-sm text-green-700 dark:text-green-400"><AppIcon name="success" /> Resolved on {formatDate(selectedItem.resolved_date || selectedItem.resolvedDate)}</p>
@@ -375,8 +369,9 @@ export default function FoundItems() {
               </div>
             )}
             {selectedItem.status === 'pending' && (
-              <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <button type="button" onClick={() => handleApproveFound(selectedItem.id)} className="ui-button ui-button-success flex-1"><AppIcon name="success" /> Approve</button>
+              <div className="space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-sm lf-text-muted">Confirm receipt once OSDS has the item in its custody.</p>
+                <button type="button" onClick={() => handleApproveFound(selectedItem.id)} className="ui-button ui-button-success w-full"><AppIcon name="success" /> Confirm OSDS receipt</button>
               </div>
             )}
           </div>

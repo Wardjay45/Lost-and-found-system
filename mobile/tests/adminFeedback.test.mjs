@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
@@ -38,6 +39,10 @@ function harness(file, api) {
       if (name.endsWith('/UI') || name === './UI') return ui;
       if (name.includes('RecoveryMetrics')) return { default: 'RecoveryMetrics', __esModule: true };
       if (name.includes('AppIcon')) return { default: 'AppIcon', __esModule: true };
+      if (/\/utils\/(recoveryTime\.mjs|formatters)$/.test(name)) {
+        const path = name.endsWith('formatters') ? name + '.js' : name;
+        return require(fileURLToPath(new URL(path, new URL('../../web/src/' + relative, import.meta.url))));
+      }
       throw Error('Unexpected admin import: ' + name);
     } });
     vm.runInContext(source, context);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { activityLogQuery, activityView, activityTypes, filterActivities } from '../../shared/activityLogs.mjs';
+import { activityLogQuery, activityView, activityTypes, filterActivities, legacyCancellationActor } from '../../shared/activityLogs.mjs';
 
 const rows = [
   { id: 1, action: 'Item Claimed', user_name: 'Verifier', role: 'admin', timestamp: '2026-10-21T10:20:00', details: JSON.stringify({ text: 'Verified handover completed.', lost_item_id: 11, found_item_id: 22, notes: 'Owner verified' }) },
@@ -34,8 +34,25 @@ test('All activities never sends an undefined action filter', () => {
 test('legacy claim names and cancellations are functional filters without losing historical events', () => {
   assert.equal(filterActivities(rows, 'claim', '')[0].id, 1);
   assert.equal(filterActivities(rows, 'cancel', 'duplicate')[0].id, 3);
+  assert.equal(activityView(rows[2]).label, 'Cancelled by unknown');
+  assert.equal(activityView({ ...rows[2], role: 'superadmin' }).label, 'Cancelled by Admin');
+  assert.equal(activityView({ ...rows[2], role: 'student' }).label, 'Cancelled by User');
   assert.deepEqual(activityTypes(rows).map(type => type.value).sort(), ['cancel', 'claim', 'match']);
   assert.equal(activityTypes(rows).some(type => type.value === 'message'), false);
+});
+
+test('legacy cancellation attribution needs the report, reason, time and a consistent actor', () => {
+  const report = { id: 3, item_id: 'LOST-3', cancel_reason: 'Duplicate', last_updated: '2026-11-09T13:00:00' };
+  const mobile = { action: 'cancel', details: 'Report LOST-3 cancelled. Reason: Duplicate', role: 'student',
+    user_name: 'Campus User', timestamp: '2026-11-09T13:00:00Z' };
+  const admin = { ...mobile, details: 'Lost report #3 cancelled (status: cancelled) Reason: Duplicate.',
+    role: 'admin', user_name: 'Staff' };
+  assert.deepEqual(legacyCancellationActor(report, 'Lost', [mobile]), { role: 'student', name: 'Campus User' });
+  assert.deepEqual(legacyCancellationActor(report, 'Lost', [admin]), { role: 'admin', name: 'Staff' });
+  assert.equal(legacyCancellationActor(report, 'Lost', [admin, mobile]), null);
+  assert.equal(legacyCancellationActor(report, 'Found', [mobile]), null);
+  assert.equal(legacyCancellationActor(report, 'Lost', [{ ...mobile, timestamp: '2026-11-09T12:57:00Z' }]), null);
+  assert.equal(legacyCancellationActor({ ...report, cancel_reason: 'Changed' }, 'Lost', [mobile]), null);
 });
 
 test('search covers report names, IDs, notes, actors, roles and recorded similarity', () => {

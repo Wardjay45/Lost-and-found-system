@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { categoryFixture } from './helpers/categoriesFixture.mjs';
+import { installReportCancellation } from './helpers/reportCancellationFixture.mjs';
 import { createProductionAccess } from '../services/productionAccess.js';
 import { auditMutations } from '../services/audit.js';
 import { createDashboardRouter } from '../routes/dashboard.js';
@@ -13,6 +14,30 @@ import { createDashboardRouter } from '../routes/dashboard.js';
 test('generic report routes cannot fabricate a recovery, undo a saved match, or overwrite a concurrent handover', async t => {
   const f=await categoryFixture();
   await f.db.exec("INSERT INTO lost_items(id,item_id,description,location_lost,status) VALUES (101,'L-MATCH','Bag','Library','potential_match'),(102,'L-ACTIVE','Bag','Library','active'); INSERT INTO found_items(id,item_id,description,location_found,status) VALUES (201,'F-PENDING','Bag','Library','pending'),(202,'F-RETURNED','Bag','Library','claimed');");
+  await f.db.exec(`INSERT INTO lost_items (id,item_id,description,location_lost,status,cancel_reason,last_updated)
+    VALUES (103,'L-LEGACY','Bag','Library','cancelled','Old reason','2026-11-09T12:00:00'),
+           (104,'L-AMBIGUOUS','Bag','Library','cancelled','Same reason','2026-11-09T12:00:00');
+    INSERT INTO found_items (id,item_id,description,location_found,status,cancel_reason,last_updated)
+    VALUES (203,'F-LEGACY','Bag','Library','cancelled','Old reason','2026-11-09T12:00:00'),
+           (204,'F-NOLOG','Bag','Library','cancelled','Unknown reason','2026-11-09T12:00:00');
+    INSERT INTO activity_logs (action,details,user_name,role,timestamp) VALUES
+      ('cancel','Lost report #103 cancelled (status: cancelled) Reason: Old reason.','Historical Admin','superadmin','2026-11-09T12:00:01'),
+      ('cancel','Report F-LEGACY cancelled. Reason: Old reason','Historical User','student','2026-11-09T12:00:00'),
+      ('cancel','Lost report #104 cancelled (status: cancelled) Reason: Same reason.','Historical Admin','superadmin','2026-11-09T12:00:00'),
+      ('cancel','Report L-AMBIGUOUS cancelled. Reason: Same reason','Historical User','student','2026-11-09T12:00:00');`);
+  await installReportCancellation(f);
+  const legacyLost = (await f.db.query('SELECT cancellation_actor FROM lost_items WHERE id >= 103 ORDER BY id')).rows;
+  assert.equal(legacyLost[0].cancellation_actor.name, 'Historical Admin');
+  assert.equal(legacyLost[1].cancellation_actor, null);
+  const legacyFound = (await f.db.query('SELECT cancellation_actor FROM found_items WHERE id >= 203 ORDER BY id')).rows;
+  assert.equal(legacyFound[0].cancellation_actor.name, 'Historical User');
+  assert.equal(legacyFound[1].cancellation_actor, null);
+  for (const role of ['anon', 'authenticated']) {
+    await assert.rejects(f.db.transaction(async tx => {
+      await tx.exec('SET LOCAL ROLE ' + role);
+      await tx.query("SELECT public.cancel_item_report('lost_items', 102, 7, 'Not allowed', false)");
+    }), { code: '42501' });
+  }
   const require=createRequire(import.meta.url), secret='isolated-report-transition-test';
   const app=express();app.use(express.json());app.use(createProductionAccess(f.writer,{jwtSecret:secret}),auditMutations(f.writer));
   for(const kind of ['lost','found']){
@@ -38,9 +63,21 @@ test('generic report routes cannot fabricate a recovery, undo a saved match, or 
   assert.equal((await call('/lost-items/101/status',{status:'cancelled',cancel_reason:'Wrong pairing'})).status,409);
   assert.equal((await call('/found-items/202/status',{status:'active'})).status,409);
   assert.equal((await call('/lost-items/102/status',{status:'cancelled'})).status,400);
-  assert.equal((await call('/lost-items/102/status',{status:'cancelled',cancel_reason:'Duplicate report'})).status,200);
+  await f.db.exec("ALTER TABLE activity_logs ADD CONSTRAINT simulate_cancel_log_failure CHECK (details NOT LIKE '%Forced failure%') NOT VALID");
+  assert.equal((await call('/lost-items/102/status',{status:'cancelled',cancel_reason:'Forced failure'})).status,503);
+  assert.equal((await f.db.query('SELECT status FROM lost_items WHERE id=102')).rows[0].status,'active');
+  await f.db.exec('ALTER TABLE activity_logs DROP CONSTRAINT simulate_cancel_log_failure');
+  const cancellation = await call('/lost-items/102/status', { status: 'cancelled', cancel_reason: ' Duplicate report ', cancellation_actor: { role: 'student' } });
+  assert.equal(cancellation.status, 200);
+  const saved = await cancellation.json();
+  assert.equal(saved.cancellation_actor.id, 7);
+  assert.equal(saved.cancellation_actor.name, 'Admin');
+  assert.equal(saved.cancellation_actor.role, 'admin');
+  assert.ok(Number.isFinite(Date.parse(saved.cancellation_actor.at)));
+  const retry = await call('/lost-items/102/status', { status: 'cancelled', cancel_reason: 'Different reason' });
+  assert.equal((await retry.json()).cancel_reason, 'Duplicate report');
   assert.equal((await call('/found-items/201/status',{status:'active'})).status,200);
-  const logs=(await f.db.query('SELECT action,user_name,details FROM activity_logs ORDER BY id')).rows;
+  const logs=(await f.db.query('SELECT action,user_name,details FROM activity_logs WHERE id > 4 ORDER BY id')).rows;
   assert.equal(logs.length,2);assert.equal(logs[0].user_name,'Admin');
   assert.match(logs[0].details,/Duplicate report/);assert.equal(logs[0].action,'cancel');assert.equal(logs[1].action,'approve');
   assert.equal((await f.db.query('SELECT status FROM lost_items WHERE id=101')).rows[0].status,'potential_match');

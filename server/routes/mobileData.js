@@ -4,8 +4,9 @@ import supabase from '../db.js';
 import { createConversationAccess } from '../services/conversationAccess.js';
 import { createProductionAccess } from '../services/productionAccess.js';
 import { requireReportLocation, parseLocationDetails } from '../services/reportLocations.js';
-import { validateStatusChange } from '../services/reportStatus.js';
+import { cancelItemReport, getReportCancellationActor } from '../services/reportStatus.js';
 import { readAll } from '../services/readAll.js';
+import { isValidProfilePhoto } from '../services/profilePhoto.js';
 
 const fields = {
   users: 'id,name,email,student_id,phone,department,gender,role,status,avatar,items_reported,items_claimed,join_date,last_active',
@@ -61,7 +62,8 @@ export function createMobileDataRouter({ client = supabase, jwtSecret = () => pr
       if (!fields[table]) fail(404, 'This data source is not available.');
       const selected = req.query.select || '*';
       const available = new Set(fields[table].split(','));
-      if (typeof selected !== 'string' || selected !== '*' && selected.split(',').some(key => !available.has(key))) fail(400, 'Choose valid record fields.');
+      const cancellationLookup = req.method === 'GET' && selected === 'cancellation_actor' && ['lost_items','found_items'].includes(table);
+      if (!cancellationLookup && (typeof selected !== 'string' || selected !== '*' && selected.split(',').some(key => !available.has(key)))) fail(400, 'Choose valid record fields.');
       const shape = row => selected === '*' ? row : Object.fromEntries(selected.split(',').filter(key => key in row).map(key => [key,row[key]]));
       const send = (rows, status = 200) => {
         const data = rows.map(shape);
@@ -76,6 +78,10 @@ export function createMobileDataRouter({ client = supabase, jwtSecret = () => pr
         return numberId(req.query.id.slice(3));
       };
       if (req.method === 'GET') {
+        if (cancellationLookup) {
+          const cancellation_actor = await getReportCancellationActor(client, { table, id: queryId(), ownerId: actor.id });
+          return send([{ cancellation_actor }]);
+        }
         if (table === 'settings') return send([{ unclaimed_days: 60 }]);
         if (table === 'conversations') {
           const conversation = await conversations.forUser(actor, false);
@@ -146,17 +152,12 @@ export function createMobileDataRouter({ client = supabase, jwtSecret = () => pr
         return send([saved], 201);
       }
       if (req.method === 'PATCH' && ['lost_items','found_items'].includes(table)) {
-        const id = queryId(), owner = table === 'lost_items' ? 'reporter_id' : 'finder_id';
         if (Object.keys(req.body).some(key => !['status','cancel_reason'].includes(key)) || req.body.status !== 'cancelled') fail(403, 'Use your report cancellation action.');
-        const current = check(await client.from(table).select('id,status').eq('id', id).eq(owner, actor.id).maybeSingle());
-        if (!current) fail(404, 'Report not found.');
-        validateStatusChange(current.status, 'cancelled', req.body.cancel_reason);
-        const now = new Date().toISOString();
-        const saved = check(await client.from(table).update({ status: 'cancelled', cancel_reason: req.body.cancel_reason.trim(), last_updated: now }).eq('id', id).eq(owner, actor.id).eq('status', current.status).select(fields[table]).maybeSingle());
-        if (!saved) fail(409, 'This report changed before cancellation. Reopen it and try again.');
-        const logged = await client.from('activity_logs').insert({ action: 'cancel', details: 'Report ' + saved.item_id + ' cancelled. Reason: ' + saved.cancel_reason, user_name: actor.name, role: actor.role, timestamp: now });
-        if (logged.error) res.set('X-Activity-Warning', 'Report cancelled, but its activity log could not be recorded.');
-        return send([saved]);
+        const saved = await cancelItemReport(client, {
+          table, id: queryId(), actorId: actor.id, reason: req.body.cancel_reason, ownerOnly: true,
+        });
+        const report = Object.fromEntries([...available].map(key => [key, saved[key]]));
+        return send([report]);
       }
       if (req.method === 'PATCH' && table === 'users') {
         if (queryId() !== Number(actor.id)) fail(403, 'Only your own profile can be updated.');
@@ -164,8 +165,13 @@ export function createMobileDataRouter({ client = supabase, jwtSecret = () => pr
         if (!Object.keys(req.body).length || Object.keys(req.body).some(key => !allowed.includes(key))) fail(400, 'Only personal profile details can be updated.');
         const updates = {};
         for (const [key,value] of Object.entries(req.body)) {
-          if (typeof value !== 'string' || value.length > (key === 'avatar' ? 200000 : 200)) fail(400, 'Enter valid profile details.');
-          updates[key] = value.trim();
+          if (key === 'avatar') {
+            if (value !== '' && !isValidProfilePhoto(value)) fail(400, 'Choose a valid profile photo.');
+            updates.avatar = value;
+          } else {
+            if (typeof value !== 'string' || value.length > 200) fail(400, 'Enter valid profile details.');
+            updates[key] = value.trim();
+          }
         }
         if (updates.name === '') fail(400, 'Your name is required.');
         const existingConversation = updates.name && updates.name !== actor.name ? await conversations.forUser(actor, false) : null;

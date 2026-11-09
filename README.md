@@ -44,6 +44,10 @@ The API reads its environment variables from `server/.env` and listens on port 3
 
 For handover evidence, apply `server/add-handover-photo.sql` after `server/add-recovery-feedback.sql` and `server/cancel-potential-match.sql`, before deploying the updated API. New releases require a photo and recorded ownership questions and answers; older claim records remain viewable without these newer fields. Photos are resized in the browser. The API saves the photo, `knowledge_answers`, and separate notes in the protected `item_recoveries` record, in the same transaction as both item statuses and the claim log. Legacy Q&A remains in the original notes.
 
+Before deploying found item reminders, apply [the reminder migration](supabase/migrations/20261109125338_found_item_reminders.sql) to the Supabase database after `server/secure-data-access.sql`. The migration registers the `found-item-turnover-reminders` Supabase Cron job. In **Settings → Found item reminders**, choose 8 or 24 hours or enter a custom delay, edit and preview the message, then enable reminders and save. Pending reports that already meet the delay become eligible at the next run. In **Found items**, use **Confirm OSDS receipt** after accepting the item to activate the report and end its reminder eligibility.
+
+Apply [the cancellation attribution migration](supabase/migrations/20261109131320_report_cancellation_actor.sql) before restarting or deploying the API with cancellation attribution. It links older cancellations to matching activity records where the actor can be identified.
+
 ## AI service
 
 ```powershell

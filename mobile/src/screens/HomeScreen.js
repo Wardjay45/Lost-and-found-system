@@ -9,6 +9,7 @@ import supabase from '../config/supabase';
 import { loadUserReports } from '../services/reporting.mjs';
 import VoiceAssistant from '../components/VoiceAssistant';
 import FormIcon from '../components/FormIcon';
+import ProfileAvatar from '../components/ProfileAvatar';
 
 const statusColors = {
   pending:         { bg: 'rgba(245, 158, 11, 0.1)', text: '#f59e0b', label: 'Pending' },
@@ -119,10 +120,8 @@ export default function HomeScreen({ navigation }) {
               What would you like to do today?
             </Text>
           </View>
-          <TouchableOpacity accessibilityLabel="Open profile" onPress={() => navigation.navigate('Profile')} style={[styles.avatar, HC.touch]}>
-            <Text style={[styles.avatarText, { fontSize: scaledFontSize(20) }]}>
-              {firstName.charAt(0) || 'U'}
-            </Text>
+          <TouchableOpacity accessibilityLabel="Open profile" onPress={() => navigation.navigate('Profile')} style={[styles.profileButton, HC.touch]}>
+            <ProfileAvatar user={user} size={48} fontSize={scaledFontSize(20)} />
           </TouchableOpacity>
         </View>
 
@@ -269,8 +268,7 @@ const baseStyles = StyleSheet.create({
   eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 8 },
   greeting: { fontSize: 24, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3 },
   subGreeting: { fontSize: 14, color: '#64748b', marginTop: 4 },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#4f46e5', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(79, 70, 229, 0.3)' },
-  avatarText: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  profileButton: { justifyContent: 'center', alignItems: 'center', borderRadius: 28 },
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 28 },
   ttsRow: { flexDirection: 'row', marginBottom: 16 },
   statCard: { flexGrow: 1, flexBasis: 90, borderRadius: 16, padding: 16, alignItems: 'center' },

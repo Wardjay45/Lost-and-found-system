@@ -27,7 +27,7 @@ import activityLogsRouter from './routes/activityLogs.js';
 import qrLocationsRouter from './routes/qrLocations.js';
 import aiRouter from './routes/ai.js';
 import speechToTextRouter from './routes/deepgram.js';
-import settingsRouter from './routes/settings.js';
+import { createSettingsRouter } from './routes/settings.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -61,7 +61,7 @@ app.use('/api/activity-logs', activityLogsRouter);
 app.use('/api/qr-locations', qrLocationsRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/speech-to-text', speechToTextRouter);
-app.use('/api/settings', settingsRouter);
+app.use('/api/settings', createSettingsRouter(supabase));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

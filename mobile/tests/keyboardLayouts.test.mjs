@@ -19,6 +19,7 @@ function harness(file, os) {
     if (name === 'react-native') return { ...native, Platform: { OS: os }, StyleSheet: { create: value => value }, Keyboard: { metrics: () => ({screenY: 500, height: 300}), isVisible: () => false, addListener(event, callback) { listeners.set(event, callback); return { remove() { listeners.delete(event); } }; } } };
     if (name.includes('KeyboardViewport')) return {default: 'KeyboardViewport', __esModule:true};
     if (name.includes('keyboardLayout')) return { keyboardOverlap, focusedFieldScroll };
+    if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0 }) };
     if (name === '@react-navigation/elements') return { useHeaderHeight: () => 64 };
     if (name === '@react-navigation/native') return { useIsFocused: () => true };
     if (name.includes('SpeechControls')) return { TextInput: 'TextInput', TouchableOpacity: 'TouchableOpacity' };
@@ -60,6 +61,8 @@ test('native resize is not applied twice; overlay keyboards reserve the actual o
   assert.equal(keyboardOverlap(80,420,{screenY:500,height:300}),0);
   assert.equal(keyboardOverlap(24,476,{screenY:500,height:300}),0);
   assert.equal(keyboardOverlap(80,720,null),0);
+  assert.equal(keyboardOverlap(24,476,{screenY:500,height:300},24),24);
+  assert.equal(keyboardOverlap(24,452,{screenY:500,height:300},24),0);
 });
 test('only the field outside the visible viewport scrolls; tall fields expose an internally scrollable area', () => {
   const base = {viewportTop:80,viewportHeight:320,keyboardTop:500,offset:100};

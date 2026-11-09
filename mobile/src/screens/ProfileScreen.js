@@ -1,16 +1,43 @@
 import { TouchableOpacity } from '../components/SpeechControls';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, Modal, Image, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAccessibility, useThemedStyles } from '../context/AccessibilityContext';
 import FormIcon from '../components/FormIcon';
+import ProfileAvatar from '../components/ProfileAvatar';
+import { pickProfilePhoto } from '../services/profilePhoto';
+import { profilePhotoSource } from '../../../shared/profilePhoto.mjs';
 
 export default function ProfileScreen({ navigation }) {
   const styles = useThemedStyles(baseStyles);
-  const { user, logout } = useAuth();
-  const { speak, accessibilityStyles, scaledFontSize, themeColors } = useAccessibility();
+  const { user, logout, updateProfile } = useAuth();
+  const { speak, accessibilityStyles, scaledFontSize, themeColors, readableColor } = useAccessibility();
   const HC = accessibilityStyles;
   const [loggingOut, setLoggingOut] = useState(false);
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const [photoStatus, setPhotoStatus] = useState(null);
+  const photoInFlight = useRef(false);
+  const hasPhoto = Boolean(profilePhotoSource(user?.avatar));
+
+  async function updatePhoto(remove = false) {
+    if (!user || photoInFlight.current) return;
+    photoInFlight.current = true;
+    setSavingPhoto(true);
+    setPhotoStatus(null);
+    try {
+      const photo = remove ? '' : await pickProfilePhoto();
+      if (photo === null) return;
+      if (!await updateProfile({ avatar: photo })) throw new Error('Could not save your profile photo. Please try again.');
+      const message = remove ? 'Profile photo removed.' : 'Profile photo updated.';
+      setPhotoStatus({ message });
+      speak(message);
+    } catch (error) {
+      setPhotoStatus({ error: true, message: error.message || 'Could not open this photo. Choose another one.' });
+    } finally {
+      photoInFlight.current = false;
+      setSavingPhoto(false);
+    }
+  }
 
   const handleLogout = () => {
     setLoggingOut(true);
@@ -42,12 +69,31 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.profileCard}>
           <View style={styles.avatarWrapper}>
             <View style={styles.avatarRing}>
-              <View style={styles.avatar}><Text style={[styles.avatarText, { fontSize: scaledFontSize(36) }]}>{user?.name?.charAt(0) || 'U'}</Text></View>
+              <ProfileAvatar user={user} size={80} fontSize={scaledFontSize(36)} accessibilityLabel="Profile photo" />
             </View>
             <View style={styles.badge}><Text style={[styles.badgeText, { fontSize: scaledFontSize(11) }]}>Student</Text></View>
           </View>
           <Text style={[styles.name, HC.text, { fontSize: scaledFontSize(24) }]}>{user?.name}</Text>
           <Text style={[styles.email, HC.textMuted, { fontSize: scaledFontSize(14) }]}>{user?.email}</Text>
+          <View style={styles.photoActions}>
+            <TouchableOpacity accessibilityRole="button" accessibilityState={{ busy: savingPhoto }} disabled={savingPhoto}
+              onPress={() => updatePhoto()} style={[styles.photoButton, HC.card, HC.touch]}>
+              {savingPhoto ? <ActivityIndicator color={themeColors.accent} size="small" />
+                : <FormIcon name="image" color={themeColors.accent} size={17} />}
+              <Text style={[styles.photoLabel, HC.textAccent, { fontSize: scaledFontSize(14) }]}>
+                {savingPhoto ? 'Updating photo…' : hasPhoto ? 'Change photo' : 'Select photo'}
+              </Text>
+            </TouchableOpacity>
+            {hasPhoto && (
+              <TouchableOpacity accessibilityRole="button" disabled={savingPhoto} onPress={() => updatePhoto(true)} style={[styles.photoButton, HC.touch]}>
+                <Text style={[styles.photoLabel, HC.textMuted, { fontSize: scaledFontSize(14) }]}>Remove photo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {photoStatus && <Text accessibilityRole={photoStatus.error ? 'alert' : undefined} accessibilityLiveRegion="polite"
+            style={[styles.photoStatus, photoStatus.error ? { color: readableColor('#ef4444') } : HC.textMuted, { fontSize: scaledFontSize(13) }]}>
+            {photoStatus.message}
+          </Text>}
         </View>
 
         <Text style={[styles.sectionTitle, HC.textMuted, { fontSize: scaledFontSize(15) }]}>Account Details</Text>
@@ -77,8 +123,10 @@ const baseStyles = StyleSheet.create({
   profileCard: { alignItems: 'center', marginBottom: 24, marginTop: 8, padding: 24, borderRadius: 24, backgroundColor: 'rgba(79, 70, 229, 0.10)', borderWidth: 1, borderColor: 'rgba(129, 140, 248, 0.2)' },
   avatarWrapper: { position: 'relative', marginBottom: 16 },
   avatarRing: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(79, 70, 229, 0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(79, 70, 229, 0.3)' },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#4f46e5', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#fff', fontSize: 36, fontWeight: '700' },
+  photoActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 16 },
+  photoButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  photoLabel: { fontWeight: '600', textAlign: 'center' },
+  photoStatus: { textAlign: 'center', marginTop: 8 },
   badge: { position: 'absolute', bottom: 0, right: -4, backgroundColor: '#4f46e5', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 2, borderColor: '#0f172a' },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   name: { fontSize: 24, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3 },

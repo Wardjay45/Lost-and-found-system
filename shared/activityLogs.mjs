@@ -1,4 +1,5 @@
 import { parseStoredTimestamp } from './timestamps.mjs';
+import { cancellationActorLabel, isAdminRole } from './roles.mjs';
 
 const types = {
   unmatch: ['Potential match cancelled', 'Match cancellations', 'close'],
@@ -8,6 +9,7 @@ const types = {
   update: ['Record updated', 'Updates', 'edit'], resolve: ['Report resolved', 'Resolutions', 'check'],
   approve: ['Item approved', 'Approvals', 'check'], reject: ['Item rejected', 'Rejections', 'error'],
   delete: ['Record deleted', 'Deletions', 'delete'], message: ['Message sent', 'Messages', 'email'],
+  'turnover reminder': ['OSDS turnover reminder sent', 'OSDS turnover reminders', 'email'],
 };
 export function normalizeActivityAction(value) {
   const action = typeof value === 'string' ? value.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') : '';
@@ -15,6 +17,36 @@ export function normalizeActivityAction(value) {
     cancelled: 'cancel', 'item cancelled': 'cancel', 'potential match': 'match', 'item matched': 'match',
     resolved: 'resolve', 'item resolved': 'resolve', approved: 'approve', rejected: 'reject' })[action] || action || 'unknown';
 }
+export function legacyCancellationDetails(report, kind) {
+  const reason = report.cancel_reason?.trim();
+  if (!reason || !['Lost', 'Found'].includes(kind)) return {};
+  return {
+    adminDetails: `${kind} report #${report.id} cancelled (status: cancelled) Reason: ${reason}.`,
+    mobileDetails: report.item_id?.startsWith(kind.toUpperCase() + '-')
+      ? `Report ${report.item_id} cancelled. Reason: ${report.cancel_reason}` : null,
+  };
+}
+
+export function legacyCancellationActor(report, kind, logs) {
+  const updatedAt = parseStoredTimestamp(report.last_updated);
+  const { adminDetails, mobileDetails } = legacyCancellationDetails(report, kind);
+  if (!updatedAt || !adminDetails) return null;
+  let actor = null;
+  for (const log of logs) {
+    if (normalizeActivityAction(log.action) !== 'cancel') continue;
+    const admin = isAdminRole(log.role);
+    const matches = (admin && log.details === adminDetails)
+      || (mobileDetails && (admin || log.role === 'student') && log.details === mobileDetails);
+    const recordedAt = matches && parseStoredTimestamp(log.timestamp);
+    if (!recordedAt || Math.abs(recordedAt - updatedAt) > 120000) continue;
+
+    const name = log.user_name || null;
+    if (actor && (actor.role !== log.role || actor.name !== name)) return null;
+    actor = { role: log.role, name };
+  }
+  return actor;
+}
+
 export function activityLogQuery(params = {}) {
   const entries = Object.entries(params).filter(([key, value]) => value !== undefined && value !== null && value !== '' && !(key === 'action' && value === 'all'));
   const query = new URLSearchParams(entries).toString();
@@ -32,7 +64,8 @@ export function activityView(log) {
   } : null;
   const score = payload?.score;
   const similarity = typeof score === 'number' && Number.isFinite(score) && score >= -1 && score <= 100 ? Math.round(score <= 1 ? score * 100 : score) : null;
-  const label = types[action]?.[0] || (action === 'unknown' ? 'Activity recorded' : action.replace(/\b\w/g, letter => letter.toUpperCase()));
+  const label = action === 'cancel' ? cancellationActorLabel(log.role)
+    : types[action]?.[0] || (action === 'unknown' ? 'Activity recorded' : action.replace(/\b\w/g, letter => letter.toUpperCase()));
   const details = text(log.details).trim();
   const plainDetails = /^[{[]/.test(details) ? '' : details;
   const summary = (action === 'match' && pair

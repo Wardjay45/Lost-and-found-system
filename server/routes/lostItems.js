@@ -1,4 +1,4 @@
-import { validateStatusChange } from '../services/reportStatus.js';
+import { cancelItemReport, validateStatusChange } from '../services/reportStatus.js';
 import { backgroundTask } from '../services/backgroundTask.js';
 import { aiFetch } from '../services/aiClient.js';
 import { Router } from 'express';
@@ -243,17 +243,21 @@ router.post('/', async (req, res) => {
 router.put('/:id/status', async (req, res) => {
   try {
     const { status, cancel_reason } = req.body;
+    if (status === 'cancelled') {
+      const report = await cancelItemReport(supabase, {
+        table: 'lost_items', id: req.params.id, actorId: req.actor.id, reason: cancel_reason, ownerOnly: false,
+      });
+      res.locals.activityRecorded = true;
+      return res.json(report);
+    }
     const { data: current, error: currentError } = await supabase.from('lost_items').select('id,status').eq('id', req.params.id).single();
     if (currentError) throw currentError;
     if (!current) return res.status(404).json({ error: 'Report not found.' });
-    validateStatusChange(current.status, status, cancel_reason);
+    validateStatusChange(current.status, status);
 
     const updates = { status, last_updated: new Date().toISOString() };
     if (status === 'resolved' || status === 'claimed') {
       updates.resolved_date = new Date().toISOString();
-    }
-    if (status === 'cancelled' && cancel_reason) {
-      updates.cancel_reason = cancel_reason;
     }
     const { data, error } = await supabase
       .from('lost_items')

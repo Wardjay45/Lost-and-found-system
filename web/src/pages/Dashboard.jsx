@@ -37,6 +37,7 @@ export default function Dashboard() {
         return <div className="activity-row" key={activity.id||index}>
           <span className="activity-row-icon"><AppIcon name={view.icon} /></span>
           <div><strong>{view.label}</strong><p className="break-words">{view.summary}</p>
+            {view.action === 'cancel' && activity.user_name && <p className="break-words">{activity.user_name}</p>}
             <time dateTime={view.timestamp || undefined} title={view.timestamp ? timeAgo(view.timestamp) : undefined}>{formatCampusDateTime(view.timestamp)}</time>
           </div>
         </div>;

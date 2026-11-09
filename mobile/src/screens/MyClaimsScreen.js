@@ -9,6 +9,7 @@ import supabase from '../config/supabase';
 import { loadUserReports } from '../services/reporting.mjs';
 import VoiceAssistant from '../components/VoiceAssistant';
 import FormIcon from '../components/FormIcon';
+import ReportCancellation from '../components/ReportCancellation';
 import { useRecoveryFeedback, RecoveryFeedbackPrompt, RecoveryFeedbackButton } from '../components/RecoveryFeedback';
 
 const statusColors = {
@@ -444,13 +445,8 @@ export default function MyClaimsScreen({ navigation }) {
                     </View>
                   )}
 
-                  {detailItem.cancel_reason && (
-                    <View style={styles.detailField}>
-                      <Text style={[styles.detailLabel, HC.textMuted, { fontSize: scaledFontSize(12) }]}>Cancel Reason</Text>
-                      <Text style={[styles.detailValue, { color: readableColor('#ef4444'), fontSize: scaledFontSize(14), fontStyle: 'italic' }]}>
-                        {detailItem.cancel_reason}
-                      </Text>
-                    </View>
+                  {detailModalVisible && detailItem.status === 'cancelled' && (
+                    <ReportCancellation key={`${detailItem.type}-${detailItem.id}`} report={detailItem} />
                   )}
 
                   {/* Potential Match Section */}

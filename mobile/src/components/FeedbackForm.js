@@ -11,6 +11,8 @@ import { initApiUrl } from '../config/api';
 import { selectSchoolGoogleAccount } from '../services/googleSignIn';
 import { requestFeedback, feedbackDraftKey, createFeedbackDraftStore, formatRecoveryTime } from '../services/feedback.mjs';
 
+const ratingLabels = ['Very dissatisfied', 'Dissatisfied', 'Neutral', 'Satisfied', 'Very satisfied'];
+
 export default function FeedbackForm({ route, navigation }) {
   const styles = useThemedStyles(baseStyles);
   const { accessibilityStyles: HC, scaledFontSize, themeColors, speak } = useAccessibility();
@@ -134,12 +136,24 @@ export default function FeedbackForm({ route, navigation }) {
         <Text style={[HC.text, { fontSize: scaledFontSize(17), fontWeight: '700' }]}>How was your experience?</Text>
         {pending && <Text accessibilityLiveRegion="polite" style={[HC.textMuted, { fontSize: scaledFontSize(14) }]}>Your submission may already be saved. Retry to confirm the original rating and comment before editing.</Text>}
         <View accessibilityRole="radiogroup" accessibilityLabel="Experience rating" style={styles.ratings}>
-          {[1, 2, 3, 4, 5].map(value => <TouchableOpacity key={value} disabled={submitting || pending} accessibilityRole="radio" accessibilityLabel={`${value} out of 5 stars`}
-            accessibilityState={{ checked: rating === value, disabled: submitting || pending }} onPress={() => { if (!scope.busy && !pending) setRating(value); }} style={[styles.rating, HC.touch, { borderColor: rating === value ? themeColors.accent : themeColors.border }]}>
-            <FormIcon name="star" size={24} color={value <= rating ? themeColors.accent : themeColors.muted} /><Text style={[HC.text, { fontSize: scaledFontSize(13) }]}>{value}</Text>
-          </TouchableOpacity>)}
+          {ratingLabels.map((label, index) => {
+            const value = index + 1;
+            const selected = rating === value;
+            const filled = value <= rating;
+            const starColor = selected ? themeColors.background : filled ? themeColors.accent : themeColors.muted;
+            return <TouchableOpacity key={value} disabled={submitting || pending} accessibilityRole="radio" accessibilityLabel={`${value} out of 5 stars, ${label}`}
+              aria-checked={selected} accessibilityState={{ checked: selected, disabled: submitting || pending }} onPress={() => { if (!scope.busy && !pending) setRating(value); }}
+              style={[styles.rating, HC.touch, { borderColor: selected ? themeColors.accent : themeColors.border, backgroundColor: selected ? themeColors.accent : themeColors.surface }]}>
+              <Text accessible={false} importantForAccessibility="no" style={{ color: starColor, fontSize: scaledFontSize(26), lineHeight: scaledFontSize(32) }}>
+                {filled ? '★' : '☆'}
+              </Text>
+              <Text style={{ color: selected ? themeColors.background : themeColors.text, fontSize: scaledFontSize(13), fontWeight: selected ? '700' : '400' }}>{value}</Text>
+            </TouchableOpacity>;
+          })}
         </View>
-        <Text style={[HC.textMuted, { fontSize: scaledFontSize(12) }]}>1 = Very dissatisfied · 5 = Very satisfied</Text>
+        <Text accessibilityLiveRegion="polite" style={[rating ? HC.textAccent : HC.textMuted, { fontSize: scaledFontSize(13), fontWeight: rating ? '700' : '400' }]}>
+          {rating ? `${rating} out of 5 stars · ${ratingLabels[rating - 1]}` : 'Choose a rating from 1 to 5 stars.'}
+        </Text>
         <Text style={[styles.label, HC.text, { fontSize: scaledFontSize(14) }]}>Comments (optional)</Text>
         <TextInput accessibilityLabel="Feedback comments, optional" style={[styles.input, HC.input, { fontSize: scaledFontSize(15) }]} placeholder="What worked well, or what could be improved?"
           placeholderTextColor={themeColors.muted} value={comment} onChangeText={value => { if (!scope.busy && !pending) setComment(value); }} editable={!submitting && !pending} multiline maxLength={1000} textAlignVertical="top" />

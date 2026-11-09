@@ -1,19 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, Platform, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { keyboardOverlap } from '../services/keyboardLayout.mjs';
 
-// Measure in window coordinates: safe areas, stack headers and Android's native
-// resize are already reflected here. Reserve only the remaining IME overlap.
+// Android's measureInWindow is relative to the visible window. The IME
+// frame uses screen coordinates, so restore the top inset before comparing.
 export default function KeyboardViewport({ children, style, onVisibilityChange }) {
   const viewport = useRef(null), frame = useRef(null), alive = useRef(true);
   const timers = useRef([]), revision = useRef(0);
   const [overlap, setOverlap] = useState(0);
+  const { top } = useSafeAreaInsets();
+  const windowScreenOffset = Platform.OS === 'android' ? top : 0;
   const measure = useCallback(() => {
     const current = ++revision.current;
     viewport.current?.measureInWindow((_x, y, _width, height) => {
-      if (alive.current && current === revision.current) setOverlap(keyboardOverlap(y, height, frame.current));
+      if (alive.current && current === revision.current) setOverlap(keyboardOverlap(y, height, frame.current, windowScreenOffset));
     });
-  }, []);
+  }, [windowScreenOffset]);
   useEffect(() => {
     alive.current = true;
     const update = event => {

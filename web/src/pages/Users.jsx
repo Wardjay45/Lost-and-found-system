@@ -8,6 +8,21 @@ import StatusBadge from '../components/common/StatusBadge';
 import Modal from '../components/common/Modal';
 import { formatDate, formatDateTime } from '../utils/formatters';
 import { accountRoleLabel, isAdminRole } from '../../../shared/roles.mjs';
+import { profileInitial, profilePhotoSource } from '../../../shared/profilePhoto.mjs';
+
+function UserAvatar({ user, large = false }) {
+  const source = profilePhotoSource(user.avatar);
+  const [failedSource, setFailedSource] = useState(null);
+  const size = large ? 'w-14 h-14 text-xl font-bold' : 'w-9 h-9 text-sm font-medium';
+  const palette = user.status === 'archived' ? 'bg-gray-200 dark:bg-gray-600 text-gray-500'
+    : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400';
+
+  return <span aria-hidden="true" className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full ${size} ${palette}`}>
+    {source && failedSource !== source
+      ? <img src={source} alt="" loading="lazy" onError={() => setFailedSource(source)} className="h-full w-full object-cover" />
+      : profileInitial(user.name)}
+  </span>;
+}
 
 export default function Users() {
   const { user: actor } = useAuth();
@@ -108,7 +123,7 @@ export default function Users() {
                 <tr key={u.id} className={`border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${u.status === 'archived' ? 'opacity-60' : ''}`}>
                   <td data-label="User" className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium ${u.status === 'archived' ? 'bg-gray-200 dark:bg-gray-600 text-gray-500' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'}`}>{u.name.charAt(0)}</div>
+                      <UserAvatar user={u} />
                       <div>
                         <p className="text-sm font-medium text-gray-900 dark:text-white">{u.name}</p>
                         <p className="text-xs text-gray-400 dark:text-gray-500">{u.email}</p>
@@ -134,7 +149,7 @@ export default function Users() {
         {selectedUser && (
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${selectedUser.status === 'archived' ? 'bg-gray-200 dark:bg-gray-600 text-gray-500' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'}`}>{selectedUser.name.charAt(0)}</div>
+              <UserAvatar user={selectedUser} large />
               <div>
                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedUser.name}</h4>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{selectedUser.email}</p>

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { categoryFixture } from './helpers/categoriesFixture.mjs';
+import { installReportCancellation } from './helpers/reportCancellationFixture.mjs';
 import { createUsersRouter } from '../routes/users.js';
 import { createMobileDataRouter } from '../routes/mobileData.js';
 import { createProductionAccess } from '../services/productionAccess.js';
@@ -31,6 +32,7 @@ test('authenticated account and mobile APIs enforce roles, ownership and server-
   const sql = readFileSync(new URL('../secure-data-access.sql', import.meta.url), 'utf8');
   await f.db.exec(sql);
   await f.db.exec("INSERT INTO users(id,name,email,password,role,status) VALUES (1,'Campus One','one@example.invalid','fixture','student','active'),(2,'Campus Two','two@example.invalid','fixture','student','active'),(8,'Superadmin','super@example.invalid','fixture','superadmin','active'); INSERT INTO categories(id,name,icon) VALUES (10,'Bags','bag'); INSERT INTO qr_locations(id,name,is_active) VALUES (10,'Library',true); INSERT INTO lost_items(id,item_id,description,location_lost,reporter_id,status) VALUES (101,'L-OWN','Own report','Library',1,'active'),(102,'L-OTHER','Private report','Library',2,'active'); INSERT INTO found_items(id,item_id,description,location_found,finder_id,finder_name,status) VALUES (201,'F-PUBLIC','Public found item','Library',2,'Private reporter','active'),(202,'F-PRIVATE','Returned item','Library',2,'Private reporter','claimed');");
+  await installReportCancellation(f);
   const secret = 'isolated-web-fixes-session';
   const app = express(); app.use(express.json());
   app.use('/api', createProductionAccess(f.writer, { jwtSecret: secret }), auditMutations(f.writer));
@@ -53,12 +55,55 @@ test('authenticated account and mobile APIs enforce roles, ownership and server-
   assert.deepEqual(await (await call('/mobile/data/found_items?id=eq.202')).json(),[]);
   assert.equal((await call('/mobile/data/users?id=eq.1','PATCH',{role:'admin'})).status,400);
   assert.equal((await call('/mobile/data/users?id=eq.2','PATCH',{phone:'wrong'})).status,403);
+  const avatar = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAMAAwDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgb/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCaAsif/9k=';
+  assert.equal((await call('/mobile/data/users?id=eq.2','PATCH',{avatar})).status,403);
+  for (const invalid of ['https://example.invalid/image.jpg', 'data:image/jpeg;base64,/9j/AA==', null]) {
+    assert.equal((await call('/mobile/data/users?id=eq.1','PATCH',{avatar:invalid})).status,400);
+  }
+  const image = Buffer.from(avatar.split(',')[1], 'base64');
+  const oversized = Buffer.from(image);
+  const frame = oversized.indexOf(Buffer.from([0xff, 0xc0]));
+  oversized.writeUInt16BE(257, frame + 7);
+  assert.equal((await call('/mobile/data/users?id=eq.1','PATCH',{avatar:'data:image/jpeg;base64,' + oversized.toString('base64')})).status,400);
+  const updatedPhoto = await call('/mobile/data/users?id=eq.1&select=id,avatar','PATCH',{avatar});
+  assert.equal(updatedPhoto.status,200);
+  assert.deepEqual(await updatedPhoto.json(), [{id:1,avatar}]);
+  assert.equal((await (await call('/users/1','GET',undefined,sessions.admin)).json()).avatar,avatar);
+  const directory = await (await call('/users','GET',undefined,sessions.admin)).json();
+  assert.equal(directory.find(user => user.id === 1).avatar,avatar);
+  assert.equal((await call('/mobile/data/users?id=eq.1','PATCH',{avatar:''})).status,200);
+  assert.equal((await (await call('/users/1','GET',undefined,sessions.admin)).json()).avatar,'');
   const reportResponse=await call('/mobile/data/lost_items','POST',{description:'New own bag',category_id:10,location_lost:'Library',reporter_id:2,reporter_name:'Forged',status:'claimed'});
   assert.equal(reportResponse.status,201); const report=(await reportResponse.json())[0];
   assert.equal(report.reporter_id,1);assert.equal(report.reporter_name,'Campus One');assert.equal(report.status,'active');
   assert.equal((await call('/mobile/data/lost_items?id=eq.101','PATCH',{status:'claimed'})).status,403);
   assert.equal((await call('/mobile/data/lost_items?id=eq.102','PATCH',{status:'cancelled',cancel_reason:'Not mine'})).status,404);
-  assert.equal((await call('/mobile/data/lost_items?id=eq.101','PATCH',{status:'cancelled',cancel_reason:'Duplicate report'})).status,200);
+  const cancelled = await call('/mobile/data/lost_items?id=eq.101','PATCH',{status:'cancelled',cancel_reason:'Duplicate report'});
+  assert.equal(cancelled.status,200);
+  assert.equal('cancellation_actor' in (await cancelled.json())[0], false);
+  const { rows: [record] } = await f.db.query('SELECT cancellation_actor FROM lost_items WHERE id = 101');
+  assert.equal(record.cancellation_actor.id, 1);
+  assert.equal(record.cancellation_actor.role, 'student');
+  const { rows: [event] } = await f.db.query("SELECT user_name,role FROM activity_logs WHERE action = 'cancel'");
+  assert.deepEqual(event, { user_name: 'Campus One', role: 'student' });
+  const actorPath = '/mobile/data/lost_items?id=eq.101&select=cancellation_actor';
+  assert.deepEqual(await (await call(actorPath)).json(), [{ cancellation_actor: { name: 'Campus One', role: 'student' } }]);
+  assert.equal((await call(actorPath, 'GET', undefined, sessions.other)).status, 404);
+  assert.equal((await call('/mobile/data/lost_items?select=cancellation_actor')).status, 400);
+  assert.equal((await call('/mobile/data/activity_logs')).status, 404);
+  await f.db.exec(`INSERT INTO found_items
+    (id,item_id,description,location_found,finder_id,status,cancel_reason,last_updated)
+    VALUES (203,'FOUND-LEGACY','Water bottle','Library',1,'cancelled','Duplicate, already filed.','2026-11-09T12:00:00'),
+           (204,'FOUND-UNKNOWN','Umbrella','Library',1,'cancelled','Older report','2026-11-09T12:00:00');
+    INSERT INTO activity_logs (action,details,user_name,role,timestamp)
+    VALUES ('cancel','Found report #203 cancelled (status: cancelled) Reason: Duplicate, already filed..','Staff at the time','superadmin','2026-11-09T12:00:01');
+    ALTER TABLE found_items DROP COLUMN cancellation_actor;`);
+  const legacyPath = '/mobile/data/found_items?id=eq.203&select=cancellation_actor';
+  assert.deepEqual(await (await call(legacyPath)).json(), [{ cancellation_actor: { name: 'Staff at the time', role: 'superadmin' } }]);
+  assert.deepEqual(await (await call('/mobile/data/found_items?id=eq.204&select=cancellation_actor')).json(), [{ cancellation_actor: null }]);
+  f.fault.table = 'activity_logs'; f.fault.action = 'select';
+  assert.equal((await call(legacyPath)).status, 503);
+  f.fault.table = null; f.fault.action = null;
   const ownConversationResponse=await call('/mobile/data/conversations','POST',{name:'Campus Two'});
   assert.equal(ownConversationResponse.status,201); const own=(await ownConversationResponse.json())[0];
   assert.equal(own.name,'Campus One');assert.equal(own.user_id,1);

@@ -106,6 +106,8 @@ export const foundItemsApi = {
 
 // Settings
 export const settingsApi = {
+  getFoundItemReminders: (options) => request('/settings/found-item-reminders', options),
+  saveFoundItemReminders: (data) => request('/settings/found-item-reminders', { method: 'PUT', body: JSON.stringify(data) }),
   get: () => request('/settings'),
   update: (data) => request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
 };
@@ -125,9 +127,7 @@ export const messagesApi = {
 
 // Activity Logs
 export const activityLogsApi = {
-  getAll: (params = {}) => {
-    return request(`/activity-logs${activityLogQuery(params)}`);
-  },
+  getAll: (params = {}, options) => request(`/activity-logs${activityLogQuery(params)}`, options),
   create: (data) => request('/activity-logs', { method: 'POST', body: JSON.stringify(data) }),
   cancelMatch: (lostId, foundId) => request('/activity-logs/unmatch', { method: 'POST', body: JSON.stringify({ lost_item_id: lostId, found_item_id: foundId }) }),
 };

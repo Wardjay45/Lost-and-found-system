@@ -6,7 +6,7 @@ export function auditMutations(client) {
     const send = res.json.bind(res);
     res.json = body => {
       res.json = send;
-      if (res.statusCode >= 400) return send(body);
+      if (res.statusCode >= 400 || res.locals.activityRecorded) return send(body);
       const report = ['lost-items','found-items'].includes(kind);
       const action = req.method === 'DELETE' ? 'delete' : req.method === 'POST' ? (report ? 'report' : 'create') : report && req.body.status === 'cancelled' ? 'cancel' : report && req.body.status === 'active' ? 'approve' : 'update';
       const reference = body?.id || req.path.split('/')[2] || 'settings';

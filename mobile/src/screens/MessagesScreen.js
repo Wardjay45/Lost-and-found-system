@@ -7,7 +7,6 @@ import { useIsFocused } from '@react-navigation/native';
 import { useMessageBadge } from '../context/MessageBadgeContext';
 import { useAuth } from '../context/AuthContext';
 import supabase from '../config/supabase';
-import VoiceAssistant from '../components/VoiceAssistant';
 
 // Tab bar is absolute positioned: bottom 16, height 72
 const TAB_BAR_HEIGHT = 72;
@@ -28,6 +27,7 @@ export default function MessagesScreen() {
 
   const HC = accessibilityStyles;
   const userName = user?.name || 'Guest';
+  const minimumInputHeight = Math.max(44, scaledFontSize(20) + 22);
 
   useEffect(() => { if (focused && appActive) void refresh(); }, [focused, appActive, refresh]);
   useEffect(() => {
@@ -177,7 +177,7 @@ export default function MessagesScreen() {
         <TextInput
           style={[
             styles.input,
-            { fontSize: scaledFontSize(15), height: Math.max(44, inputHeight) },
+            { fontSize: scaledFontSize(15), height: Math.max(minimumInputHeight, inputHeight) },
           ]}
           accessibilityLabel="Message to the Lost and Found Office"
           value={messageText}
@@ -241,6 +241,7 @@ const baseStyles = StyleSheet.create({
   messageText: { fontSize: 15, lineHeight: 20, color: '#f1f5f9' },
   messageTime: { fontSize: 10, marginTop: 4 },
   inputBar: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'flex-end',
     padding: 10,

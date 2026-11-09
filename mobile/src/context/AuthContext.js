@@ -1,4 +1,4 @@
-import { setDataSession } from '../services/dataSession.mjs';
+import { getDataSession, setDataSession } from '../services/dataSession.mjs';
 import React, { createContext, useState, useContext, useRef } from 'react';
 import supabase from '../config/supabase';
 import { initApiUrl } from '../config/api';
@@ -54,18 +54,18 @@ export function AuthProvider({ children }) {
   const signup = fields => googleRequest('google/signup', fields);
 
   const updateProfile = async (updates) => {
-    if (!user) return false;
+    if (!user || !token || getDataSession() !== token) return false;
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('users')
         .update(updates)
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .select('id,name,phone,department,gender,avatar')
+        .single();
 
-      if (!error) {
-        setUser(prev => ({ ...prev, ...updates }));
-        return true;
-      }
-      return false;
+      if (error || String(data?.id) !== String(user.id) || getDataSession() !== token) return false;
+      setUser(current => current?.id === user.id && getDataSession() === token ? { ...current, ...data } : current);
+      return true;
     } catch {
       return false;
     }
