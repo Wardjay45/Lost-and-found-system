@@ -3,7 +3,7 @@ import AppIcon from './AppIcon';
 import StatusBadge from './StatusBadge';
 import Modal from './Modal';
 import ItemDescription from './ItemDescription';
-import { formatDate } from '../../utils/formatters';
+import { formatDateTime } from '../../utils/formatters';
 
 function scorePercent(value) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value * 100))) : null;
@@ -26,7 +26,7 @@ function ReportCard({ item, kind, onPreview }) {
       <ItemDescription description={item?.description} />
       <dl className="match-report-fields">
         <div><dt>Category</dt><dd>{item?.category_name || 'Not provided'}</dd></div>
-        <div><dt>{lost ? 'Date reported' : 'Date found'}</dt><dd>{formatDate(lost ? item?.date_reported : item?.date_found || item?.date_reported)}</dd></div>
+        <div><dt>{lost ? 'Date reported' : 'Date found'}</dt><dd>{formatDateTime(lost ? item?.date_reported : item?.date_found || item?.date_reported)}</dd></div>
         <div className="match-report-location"><dt>{lost ? 'Location lost' : 'Location found'}</dt><dd>{item?.location || item?.location_lost || item?.location_found || 'Not provided'}</dd></div>
         <div className="match-report-additional"><dt>Additional Info</dt><dd>{item?.location_details?.trim() || 'No additional information provided.'}</dd></div>
         <div><dt>{lost ? 'Reported by' : 'Found by'}</dt><dd>{(lost ? item?.reporter_name : item?.finder_name || item?.reporter_name) || 'Not provided'}</dd></div>

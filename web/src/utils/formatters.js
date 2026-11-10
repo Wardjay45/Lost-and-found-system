@@ -6,6 +6,7 @@ export function formatDate(dateStr) {
 }
 
 export function formatDateTime(dateStr) {
+  if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) return formatDate(dateStr);
   return parseStoredTimestamp(dateStr) ? formatCampusDateTime(dateStr) : 'N/A';
 }
 

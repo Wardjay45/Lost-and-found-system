@@ -13,7 +13,7 @@ import ItemDescription from '../components/common/ItemDescription';
 import ReportLocationFields from '../components/common/ReportLocationFields';
 import useReportLocations from '../hooks/useReportLocations';
 import PotentialMatchReview from '../components/common/PotentialMatchReview';
-import { formatDate, formatDateTime } from '../utils/formatters';
+import { formatDateTime } from '../utils/formatters';
 import CategoryIcon from '../components/common/CategoryIcon';
 import ReportCancellation from '../components/common/ReportCancellation';
 
@@ -106,7 +106,7 @@ export default function FoundItems() {
         item.id === itemId ? { ...item, status: 'active' } : item
       ));
       setSelectedItem(null);
-      setApproveMsg('✅ OSDS receipt confirmed. The found item is now active.');
+      setApproveMsg('✅ Handover confirmed. The found item is now active.');
     } catch (err) {
       setApproveMsg(`❌ ${err.message}`);
     }
@@ -348,16 +348,16 @@ export default function FoundItems() {
               <div><p className="text-xs text-gray-500">Category</p><p className="text-sm font-medium text-gray-900 dark:text-white">{selectedItem.category_name || selectedItem.categoryName}</p></div>
               <div><p className="text-xs text-gray-500">Status</p><StatusBadge status={selectedItem.status} /></div>
               <div><p className="text-xs text-gray-500">Condition</p><StatusBadge status={selectedItem.condition || 'Good'} /></div>
-              <div><p className="text-xs text-gray-500">Date Found</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(selectedItem.date_found || selectedItem.dateFound)}</p></div>
+              <div><p className="text-xs text-gray-500">Date Found</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(selectedItem.date_found || selectedItem.dateFound)}</p></div>
               <div><p className="text-xs text-gray-500">Found At</p><p className="text-sm font-medium text-gray-900 dark:text-white">{selectedItem.location_found || selectedItem.locationFound}</p></div>
               <div><p className="text-xs text-gray-500">Found By</p><p className="text-sm font-medium text-gray-900 dark:text-white">{selectedItem.finder_name || selectedItem.finderName}</p></div>
-              <div><p className="text-xs text-gray-500">Last Updated</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(selectedItem.last_updated || selectedItem.lastUpdated)}</p></div>
+              <div><p className="text-xs text-gray-500">Last Updated</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(selectedItem.last_updated || selectedItem.lastUpdated)}</p></div>
               <div className="col-span-full"><p className="text-xs text-gray-500">Additional Info</p><p className="text-sm font-medium lf-text-primary whitespace-pre-wrap break-words">{selectedItem.location_details?.trim() || 'No additional information provided.'}</p></div>
             </div>
             {selectedItem.status === 'cancelled' && <ReportCancellation key={selectedItem.id} report={selectedItem} kind="Found" />}
             {(selectedItem.resolved_date || selectedItem.resolvedDate) && (
               <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-lg">
-                <p className="text-sm text-green-700 dark:text-green-400"><AppIcon name="success" /> Resolved on {formatDate(selectedItem.resolved_date || selectedItem.resolvedDate)}</p>
+                <p className="text-sm text-green-700 dark:text-green-400"><AppIcon name="success" /> Resolved on {formatDateTime(selectedItem.resolved_date || selectedItem.resolvedDate)}</p>
               </div>
             )}
             {selectedItem.status === 'potential_match' && (
@@ -370,8 +370,8 @@ export default function FoundItems() {
             )}
             {selectedItem.status === 'pending' && (
               <div className="space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-sm lf-text-muted">Confirm receipt once OSDS has the item in its custody.</p>
-                <button type="button" onClick={() => handleApproveFound(selectedItem.id)} className="ui-button ui-button-success w-full"><AppIcon name="success" /> Confirm OSDS receipt</button>
+                <p className="text-sm lf-text-muted">Confirm once you have received the found item.</p>
+                <button type="button" onClick={() => handleApproveFound(selectedItem.id)} className="ui-button ui-button-success w-full"><AppIcon name="success" /> Confirm handover</button>
               </div>
             )}
           </div>

@@ -12,7 +12,7 @@ import ReportImageInput from '../components/common/ReportImageInput';
 import ItemDescription from '../components/common/ItemDescription';
 import ReportLocationFields from '../components/common/ReportLocationFields';
 import useReportLocations from '../hooks/useReportLocations';
-import { formatDate, formatDateTime } from '../utils/formatters';
+import { formatDateTime } from '../utils/formatters';
 import PotentialMatchReview from '../components/common/PotentialMatchReview';
 import CategoryIcon from '../components/common/CategoryIcon';
 import ReportCancellation from '../components/common/ReportCancellation';
@@ -330,16 +330,16 @@ export default function LostItems() {
             <div className="grid grid-cols-2 gap-4">
               <div><p className="text-xs text-gray-500">Category</p><p className="text-sm font-medium text-gray-900 dark:text-white">{selectedItem.category_name || selectedItem.categoryName}</p></div>
               <div><p className="text-xs text-gray-500">Status</p><StatusBadge status={selectedItem.status} /></div>
-              <div><p className="text-xs text-gray-500">Date Reported</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(selectedItem.date_reported || selectedItem.dateReported)}</p></div>
+              <div><p className="text-xs text-gray-500">Date Reported</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(selectedItem.date_reported || selectedItem.dateReported)}</p></div>
               <div><p className="text-xs text-gray-500">Location</p><p className="text-sm font-medium text-gray-900 dark:text-white">{selectedItem.location_lost || selectedItem.locationLost}</p></div>
               <div><p className="text-xs text-gray-500">Reported By</p><p className="text-sm font-medium text-gray-900 dark:text-white">{selectedItem.reporter_name || selectedItem.reporterName}</p></div>
-              <div><p className="text-xs text-gray-500">Last Updated</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(selectedItem.last_updated || selectedItem.lastUpdated)}</p></div>
+              <div><p className="text-xs text-gray-500">Last Updated</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(selectedItem.last_updated || selectedItem.lastUpdated)}</p></div>
               <div className="col-span-full"><p className="text-xs text-gray-500">Additional Info</p><p className="text-sm font-medium lf-text-primary whitespace-pre-wrap break-words">{selectedItem.location_details?.trim() || 'No additional information provided.'}</p></div>
             </div>
             {selectedItem.status === 'cancelled' && <ReportCancellation key={selectedItem.id} report={selectedItem} kind="Lost" />}
             {(selectedItem.resolved_date || selectedItem.resolvedDate) && (
               <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-lg">
-                <p className="text-sm text-green-700 dark:text-green-400"><AppIcon name="success" /> Resolved on {formatDate(selectedItem.resolved_date || selectedItem.resolvedDate)}</p>
+                <p className="text-sm text-green-700 dark:text-green-400"><AppIcon name="success" /> Resolved on {formatDateTime(selectedItem.resolved_date || selectedItem.resolvedDate)}</p>
               </div>
             )}
             {selectedItem.status === 'potential_match' && (

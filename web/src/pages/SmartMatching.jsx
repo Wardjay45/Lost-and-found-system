@@ -11,6 +11,7 @@ import ItemDescription from '../components/common/ItemDescription';
 import { categoriesApi, activityLogsApi } from '../services/api';
 import { recordPotentialMatch } from '../services/recordPotentialMatch.mjs';
 import { showToast } from '../components/common/Toast';
+import { formatDateTime } from '../utils/formatters';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 const authenticatedFetch = (url, options = {}) => fetch(url, { ...options, headers: { ...options.headers, Authorization: 'Bearer ' + (localStorage.getItem('token') || '') } });
 
@@ -219,6 +220,7 @@ export default function SmartMatching() {
                       <AppIcon name="location" /> {match.lost_item?.location}
                     </p>
                     <p className="text-xs text-gray-400">{match.lost_item?.reporter_name}</p>
+                    <p className="text-xs text-gray-500 mt-1">Reported: {formatDateTime(match.lost_item?.date_reported)}</p>
                   </div>
                   <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                     <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1"><AppIcon name="box" /> Found</p>
@@ -227,6 +229,7 @@ export default function SmartMatching() {
                       <AppIcon name="location" /> {match.found_item?.location}
                     </p>
                     <p className="text-xs text-gray-400">{match.found_item?.reporter_name}</p>
+                    <p className="text-xs text-gray-500 mt-1">Found: {formatDateTime(match.found_item?.date_found || match.found_item?.date_reported)}</p>
                   </div>
                 </div>
 
