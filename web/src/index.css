@@ -444,6 +444,10 @@ button.metric-card:hover { border-color: var(--focus); }
 .predictive-heading > div > p { margin-top: .25rem; font-size: .8rem; line-height: 1.6; }
 .predictive-timeframe { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; }
 .predictive-timeframe > span { font-size: .8rem; color: var(--lf-text-muted); }
+.predictive-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem 1.5rem; margin-bottom: 1rem; }
+.predictive-controls .predictive-timeframe { margin-bottom: 0; }
+.predictive-source { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; font-size: .8rem; color: var(--lf-text-muted); }
+.predictive-source .ui-input { width: auto; max-width: 100%; }
 .predictive-demo-label { border: 1px solid var(--lf-30-border); background: var(--surface-subtle); color: var(--lf-text-muted); border-radius: 999px; padding: .35rem .65rem; font-size: .7rem; }
 .predictive-body { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(0, 2.4fr); gap: 1.25rem; }
 .predictive-plot { min-width: 0; }

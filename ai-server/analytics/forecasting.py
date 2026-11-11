@@ -111,7 +111,7 @@ def forecast_monthly(history, *, model_factory=prophet_model, horizon_months=FOR
                "last_observed_month": data["ds"].max().strftime("%Y-%m-%d"),
                "missing_months": missing, "missing_month_count": len(missing)}
     warnings = ["Experimental demonstration with limited historical observations; forecast accuracy has not been validated.",
-                "Missing months mean unavailable data, not zero found items. No missing months were added to training.",
+                "Missing months mean unavailable data, not zero reports. No missing months were added to training.",
                 "The extract may contain incomplete first or last months. Recorded counts do not establish full reporting coverage.",
                 "Prediction ranges reflect model assumptions and are not guaranteed outcomes or accuracy percentages."]
     if dataset.get("temporary"):

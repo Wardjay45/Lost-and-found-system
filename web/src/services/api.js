@@ -28,7 +28,9 @@ const request = async (endpoint, options = {}) => {
     const message = error.error || (res.status === 404
       ? 'This API endpoint is unavailable. Restart the API server to load the latest changes.'
       : `Request failed (HTTP ${res.status}). Please try again.`);
-    throw new Error(message);
+    const failure = new Error(message);
+    failure.code = error.code;
+    throw failure;
   }
 
   const data = await res.json();
@@ -53,7 +55,7 @@ export const feedbackApi = {
 };
 
 export const analyticsApi = {
-  getForecast: ({ timeframe = 'monthly', ...options } = {}) => request('/analytics/forecast?timeframe=' + encodeURIComponent(timeframe), options),
+  getForecast: ({ timeframe = 'monthly', source = 'sample', itemType = 'found', ...options } = {}) => request('/analytics/forecast?' + new URLSearchParams({ timeframe, source, itemType }), options),
 };
 
 // Categories

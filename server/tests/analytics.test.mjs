@@ -68,3 +68,41 @@ test('forecast timeframes forward to Python and reject unsupported or mismatched
   assert.equal((await fetch(base + 'daily', { headers })).status, 400);
   wrongHorizon = true; assert.equal((await fetch(base + 'yearly', { headers })).status, 503);
 });
+
+test('campus route forwards separate aggregated lost and found histories and never substitutes sample data', async t => {
+  const actor = { id: 7, role: 'admin', status: 'active' };
+  const now = new Date();
+  const dates = Array.from({length: 6}, (_, i) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 7 + i, 15)).toISOString());
+  let empty = false;
+  const requested = [];
+  const client = { from(table) { return { select() {
+    if (table === 'users') return { eq: () => ({ maybeSingle: async () => ({data:actor}) }) };
+    return { order: () => ({ range: async () => ({ data: empty ? [] : dates.map((created_at,id) => ({id,created_at})) }) }) };
+  } }; } };
+  const app = express();
+  app.use('/api/analytics', createAnalyticsRouter({client, jwtSecret:secret, fetcher:async (_url, options) => {
+    assert.equal(options.method, 'POST');
+    const payload = JSON.parse(options.body); requested.push(payload.dataset.record_type);
+    const historical = payload.historical;
+    const last = new Date(historical.at(-1).ds + 'T00:00:00Z'); last.setUTCMonth(last.getUTCMonth()+1);
+    return {ok:true,status:200,json:async () => ({...result,historical,
+      forecast:[{...result.forecast[0],ds:last.toISOString().slice(0,10)}],
+      dataset:{...payload.dataset,observed_months:historical.length,total_records:historical.reduce((n,r)=>n+r.y,0),first_observed_month:historical[0].ds,last_observed_month:historical.at(-1).ds,missing_months:[],missing_month_count:0}})};
+  }}));
+  const server = app.listen(0,'127.0.0.1'); await new Promise(resolve=>server.once('listening',resolve));
+  t.after(()=>{server.closeAllConnections();server.close();});
+  const base = `http://127.0.0.1:${server.address().port}/api/analytics/forecast`;
+  const headers = {Authorization:'Bearer '+jwt.sign({id:7,role:'admin'},secret)};
+  for (const type of ['lost','found']) assert.equal((await fetch(base+`?source=campus&itemType=${type}`,{headers})).status,200);
+  assert.deepEqual(requested,['lost_items','found_items']);
+  empty = true;
+  for (const source of ['campus', 'sample']) {
+    const response = await fetch(base+`?source=${source}&itemType=lost`,{headers});
+    assert.equal(response.status,422);
+    const body = await response.json();
+    assert.equal(body.code, 'FORECAST_HISTORY_UNAVAILABLE');
+    assert.equal(body.forecast, undefined);
+    assert.match(body.error, source === 'sample' ? /UBC.*found-item records only/ : /Not enough campus lost-report history/);
+  }
+  assert.equal(requested.length,2);
+});

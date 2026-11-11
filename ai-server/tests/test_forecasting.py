@@ -13,6 +13,19 @@ from analytics.routes import create_forecast_router
 
 
 class ForecastTests(unittest.TestCase):
+    def test_campus_api_forecasts_lost_and_found_separately_and_rejects_invalid_history(self):
+        app = FastAPI(); app.include_router(create_forecast_router())
+        with TestClient(app) as client:
+            for report_type in ('lost_items', 'found_items'):
+                payload = {'historical': [{'ds': '2026-07-01', 'y': 2}, {'ds': '2026-08-01', 'y': 4}, {'ds': '2026-09-01', 'y': 3}],
+                           'dataset': {'record_type': report_type, 'name': 'Campus reports', 'source': 'Campus submissions', 'temporary': False, 'description': 'Monthly submissions'}}
+                response = client.post('/api/analytics/forecast', json=payload)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json()['dataset']['record_type'], report_type)
+                self.assertEqual(response.json()['forecast'][0]['ds'], '2026-10-01')
+                payload['historical'] = payload['historical'][:2]
+                self.assertEqual(client.post('/api/analytics/forecast', json=payload).status_code, 422)
+
     def test_supplied_history_preserves_every_observation_and_the_large_gap(self):
         history = CsvMonthlySource().load()
         self.assertEqual(len(history.frame), 12)
