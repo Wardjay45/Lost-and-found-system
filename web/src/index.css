@@ -101,7 +101,8 @@ h1, h2, h3, h4, p { overflow-wrap: anywhere; }
 .sidebar-brand img { width: 38px; height: 38px; border-radius: 10px; object-fit: contain; background: #fff; padding: 2px; }
 .sidebar-brand strong { display: block; color: var(--sidebar-title); font-size: .93rem; letter-spacing: -.02em; }
 .sidebar-brand span { display: block; font-size: .68rem; margin-top: .2rem; color: var(--sidebar-text); }
-.sidebar nav { padding: .4rem .85rem 1rem; overflow-y: auto; flex: 1; }
+.sidebar nav { padding: .4rem .85rem 1rem; overflow-y: auto; flex: 1; scrollbar-width: none; }
+.sidebar nav::-webkit-scrollbar { display: none; }
 .nav-group + .nav-group { margin-top: 1.2rem; }
 .nav-group-label { text-transform: uppercase; letter-spacing: .11em; font-size: .61rem; color: var(--sidebar-text); padding: 0 .7rem; margin-bottom: .55rem; font-weight: 650; }
 .nav-link { display: flex; align-items: center; gap: .7rem; padding: .62rem .7rem; border-radius: 7px; font-size: .78rem; margin: .14rem 0; min-height: 38px; }
