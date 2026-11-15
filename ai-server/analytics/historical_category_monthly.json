@@ -1033,7 +1033,10 @@
       "first_month": "2024-06-01",
       "last_month": "2026-10-01",
       "total_records": 126,
-      "description": "External uploaded history, not DNSC records. Blank statuses and boundary months excluded. Absent months are zero as confirmed by the user."
+      "description": "Practice copy of external uploaded history, not DNSC records. Generated locations and statuses are retained as practice provenance; only Lost rows are counted. Generated Found statuses are excluded and are not evidence of Found reports. Boundary months excluded; absent months are zero under the existing user-confirmed assumption.",
+      "dataset_kind": "practice",
+      "source_file": "lost_found_practice_filled(1).csv",
+      "source_sha256": "793a64930215e58af599d80f9f279d1bd8332a69b7253882ca1a5b644c105510"
     }
   },
   "found": {

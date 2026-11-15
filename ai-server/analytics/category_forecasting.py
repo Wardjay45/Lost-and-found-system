@@ -90,6 +90,16 @@ def evaluate_categories(payload, predictor=predict_next):
                         metric['predictions'].append({'phase': phase, 'ds': str(history.ds.iloc[index].date()), 'actual': actual, 'predicted': value})
                     metric[phase + '_MAE'] = float(np.abs(errors).mean())
                     metric[phase + '_RMSE'] = float(np.sqrt(np.square(errors).mean()))
+                    # Fixed pre-phase training scales, never validation/test targets.
+                    differences = np.diff(history.y.iloc[:indices.start].to_numpy(dtype=float))
+                    absolute_scale = float(np.abs(differences).mean())
+                    squared_scale = float(np.square(differences).mean())
+                    metric[phase + '_MASE'] = (metric[phase + '_MAE'] / absolute_scale
+                                               if absolute_scale > 0 else None)
+                    metric[phase + '_RMSSE'] = (metric[phase + '_RMSE'] / math.sqrt(squared_scale)
+                                                if squared_scale > 0 else None)
+                    metric[phase + '_scale_note'] = ('Defined' if absolute_scale > 0
+                                                       else 'N/A: constant training history')
                 if metric['notes']:
                     metric['status'] = 'convergence_warning'
             except Exception as error:
@@ -121,8 +131,11 @@ def evaluate_categories(payload, predictor=predict_next):
                    notes=chosen['forecast_notes'])
     return {'categories': results, 'dataset': payload['dataset'],
             'protocol': {'minimum_months': 18, 'validation_months': 6, 'test_months': 6,
+                         'metrics': ['MAE', 'RMSE', 'MASE', 'RMSSE'],
+                         'scaling': 'Lag 1; fixed training denominators before each phase; zero denominator returns null.',
                          'selection': 'Lowest validation MAE, then RMSE; test scores never select the method.'},
             'warnings': ['MAE and RMSE are errors in reports per month, not accuracy percentages.',
+                         'MASE and RMSSE are scaled errors, not percentages; constant training histories return N/A.',
                          'Sparse zero-report periods can make selection uninformative. Compare test scores with the baseline.',
                          'Forecasts target the month after the last complete source month, which may not be the current month.']}
 

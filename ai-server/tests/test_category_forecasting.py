@@ -66,6 +66,33 @@ class CategoryForecastTests(unittest.TestCase):
         self.assertIsNone(row['expected_reports'])
         self.assertEqual(row['status'], 'insufficient_history')
 
+    def test_scaled_metrics_use_fixed_pre_phase_training(self):
+        months = pd.date_range('2024-01-01', periods=20, freq='MS')
+        payload = {'categories': ['Keys'], 'dataset': {}, 'historical': [
+            {'category': 'Keys', 'ds': str(date.date()), 'y': 2 * index}
+            for index, date in enumerate(months)]}
+        row = evaluate_categories(payload, lambda method, training: (float(training.y.iloc[-1]), []))['categories'][0]
+        for metric in row['metrics']:
+            for phase in ('validation', 'test'):
+                self.assertEqual(metric[phase + '_MAE'], 2)
+                self.assertEqual(metric[phase + '_RMSE'], 2)
+                self.assertEqual(metric[phase + '_MASE'], 1)
+                self.assertEqual(metric[phase + '_RMSSE'], 1)
+
+    def test_constant_training_returns_json_safe_null_scaled_errors(self):
+        import json
+        months = pd.date_range('2024-01-01', periods=20, freq='MS')
+        payload = {'categories': ['Keys'], 'dataset': {}, 'historical': [
+            {'category': 'Keys', 'ds': str(date.date()), 'y': 0}
+            for date in months]}
+        response = evaluate_categories(payload, lambda *_: (0., []))
+        json.dumps(response, allow_nan=False)
+        for metric in response['categories'][0]['metrics']:
+            for phase in ('validation', 'test'):
+                self.assertEqual(metric[phase + '_MAE'], 0)
+                self.assertIsNone(metric[phase + '_MASE'])
+                self.assertIsNone(metric[phase + '_RMSSE'])
+
 
 if __name__ == '__main__':
     unittest.main()

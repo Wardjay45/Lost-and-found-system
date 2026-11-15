@@ -49,9 +49,9 @@ export default function CategoryForecastAnalytics() {
     },
   };
   const download = () => {
-    const fields = ['category', 'method', 'status', 'forecast_month', 'expected_reports', 'forecast_status', 'validation_MAE', 'validation_RMSE', 'test_MAE', 'test_RMSE'];
-    const rows = data.categories.flatMap(row => row.metrics.map(metric => ({ category: row.category, ...metric })));
-    const csv = [fields, ...rows.map(row => fields.map(field => row[field] ?? ''))].map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(',')).join('\r\n');
+    const fields = ['category', 'method', 'status', 'forecast_month', 'expected_reports', 'forecast_status', 'validation_MAE', 'validation_RMSE', 'validation_MASE', 'validation_RMSSE', 'validation_scale_note', 'test_MAE', 'test_RMSE', 'test_MASE', 'test_RMSSE', 'test_scale_note', 'dataset_kind', 'data_source', 'report_type'];
+    const rows = data.categories.flatMap(row => row.metrics.map(metric => ({ category: row.category, ...metric, dataset_kind: data.dataset.dataset_kind || 'recorded', data_source: source, report_type: itemType })));
+    const csv = [fields, ...rows.map(row => fields.map(field => row[field] ?? (field.endsWith('_MASE') || field.endsWith('_RMSSE') ? 'N/A' : '')))].map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = source + '_' + itemType + '_model_comparison.csv'; link.click(); URL.revokeObjectURL(url);
   };
@@ -64,6 +64,7 @@ export default function CategoryForecastAnalytics() {
     {loading && !data && <LoadingState label="Preparing category forecasts..." />}
     {error && <ErrorState message={error} onRetry={() => load()} />}
     {data && <>
+      {data.dataset.dataset_kind === 'practice' && <p className="lf-text-muted" role="note">Practice dataset: includes generated fields. These results are for testing and do not establish real-world forecasting accuracy.</p>}
       {source === 'historical' && itemType === 'found' ? <EmptyState icon="chart" title="No confirmed Found records" description="Select Lost reports to view the uploaded history, or Current Data for campus reports." /> : data.categories.length ? <>
         <div className="forecast-shared-legend" aria-label="Chart legend">{['Recorded reports', ...forecastMethods].map((label, index) => <span key={label}><i className={'forecast-line-key forecast-line-' + index} />{label}</span>)}</div>
         <div className="category-trend-grid">{data.categories.map(row => {
