@@ -4,11 +4,33 @@ import { createProductionAccess } from '../services/productionAccess.js';
 import { aiFetch } from '../services/aiClient.js';
 import { validateForecastResponse } from '../../shared/forecast.mjs';
 import { readAll } from '../services/readAll.js';
-import { reportForecastHistory } from '../services/reportForecastHistory.js';
+import { reportForecastHistory, categoryForecastHistory } from '../services/reportForecastHistory.js';
 
 export function createAnalyticsRouter({ client = supabase, jwtSecret, fetcher = aiFetch } = {}) {
   const router = Router();
   router.use(createProductionAccess(client, { ...(jwtSecret === undefined ? {} : { jwtSecret }) }));
+  router.get('/category-forecast', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const source = req.query.source || 'current', itemType = req.query.itemType || 'lost';
+    if (!['current', 'historical'].includes(source) || !['lost', 'found'].includes(itemType)) return res.status(400).json({ error: 'Choose a valid data source and report type.' });
+    try {
+      const base = (process.env.AI_SERVER_URL || 'http://localhost:8000').replace(/\/$/, '');
+      let options = { signal: AbortSignal.timeout(280000) };
+      if (source === 'current') {
+        const dateColumn = itemType === 'lost' ? 'date_reported' : 'date_found';
+        const rows = await readAll(client.from(`${itemType}_items`).select(`id,category_id,category_name,created_at:${dateColumn}`).order('id', { ascending: true }));
+        const categories = await readAll(client.from('categories').select('id,name').order('id', { ascending: true }));
+        options = { ...options, method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(categoryForecastHistory(rows, itemType, categories)) };
+      }
+      const response = await fetcher(`${base}/api/analytics/category-forecast?itemType=${itemType}`, options);
+      if (!response.ok) return res.status(response.status === 422 ? 422 : 503).json({ error: 'Category forecasts could not be calculated. Check the history and Python forecasting dependencies.' });
+      const result = await response.json();
+      if (!Array.isArray(result.categories) || !result.dataset || !result.protocol) throw new Error('Invalid category forecast response');
+      res.json(result);
+    } catch {
+      res.status(503).json({ error: 'Category forecasting is unavailable. Check that the Python AI service is running with Prophet and statsmodels installed.' });
+    }
+  });
   router.get('/forecast', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     const timeframe = req.query.timeframe || 'monthly';

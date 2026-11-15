@@ -6,7 +6,7 @@ import useLiveRefresh from '../hooks/useLiveRefresh';
 import { dashboardApi, lostItemsApi, foundItemsApi, categoriesApi } from '../services/api';
 import { PageHeader, DataRegion, EmptyState } from '../components/common/UI';
 import StatCard from '../components/common/StatCard';
-import PredictiveAnalytics from '../components/analytics/PredictiveAnalytics';
+import PredictiveAnalytics from '../components/analytics/CategoryForecastAnalytics';
 import AppIcon from '../components/common/AppIcon';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
@@ -114,8 +114,7 @@ export default function Analytics() {
       </div>
     </DataRegion>
     <PredictiveAnalytics />
-    {!pageLoading && !pageError && <section className="analytics-descriptive" aria-labelledby="descriptive-analytics-title">
-      <header className="analytics-section-heading"><span><AppIcon name="chart" /></span><div><h2 id="descriptive-analytics-title">Descriptive analytics</h2><p>A summary of reports already recorded in your system.</p></div></header>
+    {!pageLoading && !pageError && <section className="analytics-descriptive" aria-label="Recorded report statistics">
       <section className="ui-panel analytics-descriptive-panel analytics-history-panel">
           <div className="section-header analytics-panel-heading"><div><h3>Historical reporting trends</h3><p>Compare lost and found reports over time</p></div>
             <div className="segmented-control" role="group" aria-label="Report period">{['monthly', 'weekly'].map(period => <button type="button" key={period} aria-pressed={trendPeriod === period} onClick={() => setTrendPeriod(period)}>{period === 'monthly' ? 'Monthly' : 'Weekly'}</button>)}</div>

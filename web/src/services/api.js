@@ -55,6 +55,7 @@ export const feedbackApi = {
 };
 
 export const analyticsApi = {
+  getCategoryForecast: ({ source = 'current', itemType = 'lost', ...options } = {}) => request('/analytics/category-forecast?' + new URLSearchParams({ source, itemType }), options),
   getForecast: ({ timeframe = 'monthly', source = 'sample', itemType = 'found', ...options } = {}) => request('/analytics/forecast?' + new URLSearchParams({ timeframe, source, itemType }), options),
 };
 
