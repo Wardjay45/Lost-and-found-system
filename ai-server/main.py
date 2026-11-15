@@ -6,6 +6,7 @@ Runs on port 8000 alongside the Express.js server on port 3001.
 import base64
 import os
 import hmac
+from typing import Literal
 from pathlib import Path
 import io
 import traceback
@@ -101,6 +102,10 @@ def get_clip():
     return clip_model, clip_processor
 
 
+from model_comparison import create_comparison_router
+app.include_router(create_comparison_router(get_clip, get_text_model, get_device, model_source))
+
+
 def extract_image_embedding(model, inputs):
     """
     Extract normalized image embedding from CLIP model output.
@@ -145,8 +150,7 @@ class CombinedSearchRequest(BaseModel):
     image_base64: str = ""
     stored_items: list[StoredItem] = []
     top_k: int = Field(5, ge=1, le=100)
-    image_weight: float = Field(0.7, ge=0.0, le=1.0)
-    text_weight: float = Field(0.3, ge=0.0, le=1.0)
+    mode: Literal['image', 'text'] | None = None
 
 
 # ── Response models ─────────────────────────────────────────────
@@ -185,6 +189,7 @@ class CombinedMatchItem(BaseModel):
 
 class CombinedSearchResponse(BaseModel):
     matches: list[CombinedMatchItem]
+    matching_mode: Literal['image', 'text']
 
 
 @app.get("/health")
@@ -285,28 +290,29 @@ def compute_similarity(request: MatchRequest):
 @app.post("/combined-search", response_model=CombinedSearchResponse)
 def combined_search(request: CombinedSearchRequest):
     """
-    Generate both image and text embeddings and return combined results.
+    Rank one modality at a time while fusion evaluation is pending.
+    The legacy route name is retained for existing mobile clients.
     Input: {
         "text": "optional description",
         "image_base64": "optional base64 image",
         "stored_items": [{ "id": 1, "image_embedding": [...], "text_embedding": [...] }, ...],
         "top_k": 5,
-        "image_weight": 0.7,
-        "text_weight": 0.3
+        "mode": "image"
     }
     """
     text = request.text
     image_b64 = request.image_base64
     stored_items = request.stored_items
     top_k = request.top_k
-    img_weight = request.image_weight
-    txt_weight = request.text_weight
+    mode = request.mode or ('image' if image_b64 else 'text')
+    if not (image_b64 if mode == 'image' else text.strip()):
+        raise HTTPException(status_code=400, detail=f'Provide a usable {mode} query for {mode} matching')
 
     query_img_emb = None
     query_txt_emb = None
 
     # Generate query embeddings
-    if image_b64:
+    if mode == 'image':
         try:
             if "base64," in image_b64:
                 raw = image_b64.split("base64,")[1]
@@ -321,7 +327,7 @@ def combined_search(request: CombinedSearchRequest):
         except Exception as e:
             print(f"Image embedding failed: {e}")
 
-    if text:
+    if mode == 'text':
         try:
             tm = get_text_model()
             query_txt_emb = tm.encode(f"query: {text}", normalize_embeddings=True)
@@ -329,12 +335,12 @@ def combined_search(request: CombinedSearchRequest):
             print(f"Text embedding failed: {e}")
 
     if query_img_emb is None and query_txt_emb is None:
-        raise HTTPException(status_code=400, detail="Provide either text or image_base64")
+        raise HTTPException(status_code=503, detail=f'{mode.title()} matching is unavailable; please try again')
 
     results = score_candidates(query_img_emb, query_txt_emb,
                                [item.model_dump() for item in stored_items],
-                               img_weight, txt_weight, top_k)
-    return {"matches": [CombinedMatchItem(**item) for item in results]}
+                               top_k=top_k)
+    return {"matches": [CombinedMatchItem(**item) for item in results], "matching_mode": mode}
 
 
 if __name__ == "__main__":

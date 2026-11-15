@@ -11,6 +11,24 @@ from evaluate import summarize, validate_manifest, run_benchmark
 
 
 class ScoringTests(unittest.TestCase):
+    def test_runtime_ranks_selected_modality_and_ignores_legacy_weights(self):
+        import main
+        import numpy as np
+        from unittest.mock import patch
+        class Model:
+            def encode(self, *_args, **_kwargs): return np.array([1., 0.])
+        request = main.CombinedSearchRequest(text='wallet', image_base64='not used for text mode',
+            mode='text', image_weight=.7, text_weight=.3,
+            stored_items=[main.StoredItem(id='image-winner', image_embedding=[1., 0.], text_embedding=[0., 1.]),
+                          main.StoredItem(id='text-winner', image_embedding=[0., 1.], text_embedding=[1., 0.])])
+        with patch.object(main, 'get_text_model', return_value=Model()), patch.object(main, 'get_clip') as clip:
+            response = main.combined_search(request)
+            clip.assert_not_called()
+        self.assertEqual(response['matching_mode'], 'text')
+        self.assertEqual(response['matches'][0].id, 'text-winner')
+        self.assertAlmostEqual(response['matches'][0].score, 1., places=7)
+        self.assertEqual(response['matches'][0].image_score, 0.)
+
     def test_float32_rounding_never_produces_a_score_above_one(self):
         result = score_candidates([1.0000001192092896, 0], [1.0000001192092896, 0],
                                   [{"id": "same", "image_embedding": [1, 0], "text_embedding": [1, 0]}])[0]
@@ -107,7 +125,8 @@ class ScoringTests(unittest.TestCase):
             def encode(self, *_args, **_kwargs): return np.array([1., 0.])
         with patch.object(main, "get_text_model", return_value=Model()):
             response = main.combined_search(main.CombinedSearchRequest(text="bag", stored_items=[main.StoredItem(id="a", text_embedding=[1., 0.])]))
-        self.assertEqual(set(response), {"matches"})
+        self.assertEqual(set(response), {"matches", "matching_mode"})
+        self.assertEqual(response['matching_mode'], 'text')
         self.assertEqual(set(response["matches"][0].model_dump()), {"id", "score", "image_score", "text_score"})
         self.assertAlmostEqual(response["matches"][0].score, 1., places=7)
 
