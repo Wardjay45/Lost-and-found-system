@@ -22,7 +22,6 @@ function ReportCard({ item, kind, onPreview }) {
       </button> : <div className="match-photo-empty"><AppIcon name="image" /><span>{item?.image ? 'Photo unavailable' : 'No photo provided'}</span></div>}
     </div>
     <div className="match-report-body">
-      <p className="match-report-id">{item?.item_id || 'Report ID unavailable'}</p>
       <ItemDescription description={item?.description} />
       <dl className="match-report-fields">
         <div><dt>Category</dt><dd>{item?.category_name || 'Not provided'}</dd></div>
@@ -45,13 +44,13 @@ export default function MatchComparison({ match }) {
     <div className="match-report-grid"><ReportCard kind="lost" item={match.lost_item} onPreview={setPreview} /><ReportCard kind="found" item={match.found_item} onPreview={setPreview} /></div>
     <section className="match-score-panel" aria-label="Similarity breakdown">
       <h3>Similarity breakdown</h3>
-      <div className="match-score-grid">{[['Combined', match.score], ['Image similarity', match.image_score], ['Text similarity', match.text_score]].map(([label, score]) => {
+      <div className="match-score-grid">{[['Ranking score', match.score], ['Image similarity', match.matching_mode === 'text' ? null : match.image_score], ['Text similarity', match.matching_mode === 'image' ? null : match.text_score]].map(([label, score]) => {
         const percent = scorePercent(score);
         return <div className="match-score" key={label}><div><span>{label}</span><strong>{percent === null ? 'Unavailable' : `${percent}%`}</strong></div>
           {percent !== null && <div className="match-score-track" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>}
         </div>;
       })}</div>
-      <p>{bothScores ? 'Combined score uses 70% image similarity and 30% text similarity.' : match.image_score > 0 ? 'Combined score uses the available image comparison.' : match.text_score > 0 ? 'Combined score uses the available text comparison.' : 'Similarity scores are shown when comparison data is available.'}</p>
+      <p>{match.matching_mode === 'image' ? `Ranked using image similarity only (${match.model_name || 'CLIP'}).` : match.matching_mode === 'text' ? `Ranked using text similarity only (${match.model_name || 'E5'}).` : bothScores ? 'Previously saved image and text scores are shown for reference.' : 'Similarity scores are shown when comparison data is available.'}</p>
     </section>
     <Modal isOpen={!!preview} onClose={() => setPreview(null)} title={preview?.label || 'Item photo'} size="xl"><img className="image-preview" src={preview?.src} alt={preview?.label || 'Item photo'} /></Modal>
   </div>;

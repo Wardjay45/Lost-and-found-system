@@ -1,3 +1,4 @@
+import { createEditReportHandler } from '../services/editReport.js';
 import { cancelItemReport, validateStatusChange } from '../services/reportStatus.js';
 import { backgroundTask } from '../services/backgroundTask.js';
 import { aiFetch } from '../services/aiClient.js';
@@ -277,33 +278,7 @@ router.put('/:id/status', async (req, res) => {
 });
 
 // PUT /api/found-items/:id
-router.put('/:id', async (req, res) => {
-  try {
-    const { description, category_id, category_name, category_icon, location_found, condition, image, status } = req.body;
-    const updates = { last_updated: new Date().toISOString() };
-    if (description !== undefined) updates.description = description;
-    if (category_id !== undefined) updates.category_id = category_id;
-    if (category_name !== undefined) updates.category_name = category_name;
-    if (category_icon !== undefined) updates.category_icon = category_icon;
-    if (location_found !== undefined) updates.location_found = await requireReportLocation(supabase, location_found);
-    if (req.body.location_details !== undefined) updates.location_details = parseLocationDetails(req.body.location_details);
-    if (condition !== undefined) updates.condition = condition;
-    if (image !== undefined) updates.image = image;
-    if (status !== undefined) return res.status(400).json({ error: 'Use the report status action or verified handover to change status.' });
-    const { data, error } = await supabase
-      .from('found_items')
-      .update(updates)
-      .eq('id', req.params.id)
-      .select()
-      .single();
-    if (error) throw error;
-    if (!data) return res.status(404).json({ error: 'Found item not found' });
-
-    res.json(data);
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
-  }
-});
+router.put('/:id', createEditReportHandler({ client: supabase, kind: 'found', uploadImage: uploadBase64 }));
 
 // DELETE /api/found-items/:id
 router.delete('/:id', async (req, res) => {

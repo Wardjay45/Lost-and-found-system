@@ -18,14 +18,17 @@ for (const kind of ['lost', 'found']) {
       return {
         select: (_fields, options) => options?.head ? Promise.resolve({ count: rows.length }) : {
           order: async () => ({ data: rows, error: null }),
-          eq: (_key, id) => ({ single: async () => ({ data: rows.find(row => row.id === Number(id)), error: null }) }),
+          eq: (_key, id) => ({ single: async () => ({ data: rows.find(row => row.id === Number(id)), error: null }), maybeSingle: async () => ({ data: rows.find(row => row.id === Number(id)), error: null }) }),
         },
         insert: data => ({ select: () => ({ single: async () => {
-          const row = { id: rows.length + 1, ...data }; rows.push(row); return { data: row, error: null };
+          const row = { id: rows.length + 1, last_updated: null, ...data }; rows.push(row); return { data: row, error: null };
         } }) }),
-        update: data => ({ eq: (_key, id) => ({ select: () => ({ single: async () => {
-          const row = rows.find(row => row.id === Number(id)); Object.assign(row, data); return { data: row, error: null };
-        } }) }) }),
+        update: data => {
+          const filters = [];
+          const query = { eq(key, value) { filters.push([key, value]); return query; }, is(key, value) { return query.eq(key, value); }, select: () => query,
+            maybeSingle: async () => { const row = rows.find(row => filters.every(([key, value]) => String(row[key]) === String(value))); if (row) Object.assign(row, data); return { data: row || null, error: null }; } };
+          return query;
+        },
       };
     } };
     const key = `report-test-${kind}`;
@@ -39,7 +42,7 @@ for (const kind of ['lost', 'found']) {
       return `from ${JSON.stringify(resolved)}`;
     });
     const router = (await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)).default;
-    const app = express(); app.use(express.json()); app.use('/', router);
+    const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.actor = { id: 7, role: 'admin' }; next(); }); app.use('/', router);
     const server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
     globalThis.fetch = async () => ({ ok: false, status: 503 });

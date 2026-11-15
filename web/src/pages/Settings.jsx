@@ -1,3 +1,4 @@
+import { resolveMatchTemplate } from '../services/matchNotification.mjs';
 import { useAppSettings } from '../context/AppContext';
 import AppIcon from '../components/common/AppIcon';
 import { PageHeader } from '../components/common/UI';
@@ -27,7 +28,7 @@ export default function Settings() {
           <p>Sent to the reporter in Messages when you mark a potential match.</p>
           <div className="mt-5">
             <label htmlFor="match-template" className="block text-sm font-medium mb-2">Message template</label>
-            <textarea id="match-template" className="ui-input w-full" rows={5} value={settings.matchTemplate || 'Our system has found an item that may match your lost report ({similarity}% similarity). Please visit the Campus Lost and Found Office within three (3) days and bring a valid school ID. The administrator will verify ownership before the item is released.'} onChange={e => updateSetting('matchTemplate',e.target.value)} />
+            <textarea id="match-template" className="ui-input w-full" rows={5} value={resolveMatchTemplate(settings.matchTemplate)} onChange={e => updateSetting('matchTemplate',e.target.value)} />
             <details className="mt-3 text-xs lf-text-muted">
               <summary className="cursor-pointer">Personalize the message</summary>
               <p className="mt-2">Use {'{userName}'} for the reporter’s name, {'{itemDescription}'} for the lost item, and {'{similarity}'} for the match percentage.</p>

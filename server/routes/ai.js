@@ -1,9 +1,12 @@
 import { prepareCandidateEmbeddings } from '../services/candidateEmbeddings.js';
 import { aiFetch } from '../services/aiClient.js';
 import { Router } from 'express';
+import { createComparisonRouter } from '../services/comparisonRouter.js';
+import { matchReportsWithModel, REPORT_MODELS } from '../services/reportModelMatching.js';
 import supabase from '../db.js';
 
 const router = Router();
+router.use('/comparison', createComparisonRouter());
 
 const AI_URL = process.env.AI_SERVER_URL || 'http://localhost:8000';
 
@@ -29,7 +32,8 @@ const fetchImageAsBase64 = async (url) => {
  */
 router.post('/match', async (req, res) => {
   try {
-    const { item_type, description, image_base64 } = req.body;
+    const { item_type, description, image_base64, mode } = req.body;
+    if (mode != null && !['image', 'text'].includes(mode)) return res.status(400).json({ error: 'Select image or text matching.' });
 
     if (!item_type) {
       return res.status(400).json({ error: 'item_type (lost or found) is required' });
@@ -63,8 +67,7 @@ router.post('/match', async (req, res) => {
       image_base64: image_base64 || '',
       stored_items: aiItems,
       top_k: 10,
-      image_weight: 0.7,
-      text_weight: 0.3,
+      ...(mode ? { mode } : {}),
     };
 
     const aiResponse = await aiFetch(`${AI_URL}/combined-search`, {
@@ -88,6 +91,7 @@ router.post('/match', async (req, res) => {
         score: m.score,
         image_score: m.image_score ?? 0,
         text_score: m.text_score ?? 0,
+        matching_mode: aiResult.matching_mode,
         item_id: match?.item_id,
         description: match?.description,
         category_name: match?.category_name,
@@ -114,6 +118,10 @@ router.post('/match', async (req, res) => {
  */
 router.post('/auto-match', async (req, res) => {
   try {
+    const mode = req.body?.mode;
+    if (mode != null && !['image', 'text'].includes(mode)) return res.status(400).json({ error: 'Select image or text matching.' });
+    const selectedModel = req.body?.model;
+    if (selectedModel != null && !Object.hasOwn(REPORT_MODELS, selectedModel)) return res.status(400).json({ error: 'Select a supported matching model.' });
     // Matching rules:
     // - Lost items: only 'active' (pending = not yet approved, potential_match/matched/claimed = already matched)
     // - Found items: only 'active' (potential_match/matched/claimed = already matched)
@@ -131,7 +139,24 @@ router.post('/auto-match', async (req, res) => {
         lost_count: lostItems?.length || 0,
         found_count: foundItems?.length || 0,
         message: 'Need both lost and found items to match.',
+        ...(selectedModel ? { model: selectedModel, skipped_count: 0, query_count: 0, candidate_count: 0 } : {}),
       });
+    }
+
+    if (selectedModel) {
+      const result = await matchReportsWithModel(lostItems, foundItems, selectedModel);
+      const report = (item, kind) => ({ id: item.id, item_id: item.item_id, description: item.description,
+        category_name: item.category_name, location: kind === 'lost' ? item.location_lost : item.location_found || item.location_lost,
+        location_details: item.location_details, last_updated: item.last_updated, image: item.image_url || item.image,
+        status: item.status, reporter_name: item.reporter_name || item.finder_name, reporter_id: item.reporter_id,
+        finder_name: item.finder_name, date_reported: item.date_reported, date_found: item.date_found, condition: item.condition });
+      return res.json({ matches: result.pairs.map(pair => ({ id: `match-${pair.lost.id}-${pair.found.id}`,
+        score: pair.score, image_score: result.mode === 'image' ? pair.score : null,
+        text_score: result.mode === 'text' ? pair.score : null, matching_mode: result.mode,
+        model: selectedModel, model_name: result.model_name,
+        lost_item: report(pair.lost, 'lost'), found_item: report(pair.found, 'found') })),
+        lost_count: lostItems.length, found_count: foundItems.length, model: selectedModel,
+        skipped_count: result.skipped, query_count: result.query_count, candidate_count: result.candidate_count });
     }
 
     await prepareCandidateEmbeddings(supabase, foundItems);
@@ -163,8 +188,7 @@ router.post('/auto-match', async (req, res) => {
           image_base64: imageForAi,
           stored_items: foundAiItems,
           top_k: 5,
-          image_weight: 0.7,
-          text_weight: 0.3,
+          ...(mode ? { mode } : {}),
         };
 
         const aiResponse = await aiFetch(`${AI_URL}/combined-search`, {
@@ -186,6 +210,7 @@ router.post('/auto-match', async (req, res) => {
             score: m.score,
             image_score: m.image_score ?? 0,
             text_score: m.text_score ?? 0,
+            matching_mode: aiResult.matching_mode,
             lost_item: {
               id: lost.id,
               item_id: lost.item_id,

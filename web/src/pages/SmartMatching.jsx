@@ -1,3 +1,4 @@
+import ItemPhoto from '../components/common/ItemPhoto';
 import { sendMatchNotification } from '../services/matchNotification.mjs';
 import AppIcon from '../components/common/AppIcon';
 import { PageHeader, ErrorState, LoadingState } from '../components/common/UI';
@@ -5,6 +6,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import useLiveRefresh from '../hooks/useLiveRefresh';
 import Modal from '../components/common/Modal';
 import MatchComparison from '../components/common/MatchComparison';
+import AlgorithmComparison from '../components/common/AlgorithmComparison';
 import HandoverPhotoInput from '../components/common/HandoverPhotoInput';
 import { normalizeKnowledgeAnswers } from '../../../shared/claimVerification.mjs';
 import ItemDescription from '../components/common/ItemDescription';
@@ -20,6 +22,12 @@ const ALL_CATEGORIES_OPTION = '__all__';
 export default function SmartMatching() {
   const [pageError, setPageError] = useState('');
   const [matches, setMatches] = useState([]);
+  const [selectedModel, setSelectedModel] = useState('clip');
+  const selectedModelRef = useRef(selectedModel);
+  selectedModelRef.current = selectedModel;
+  const modelCache = useRef(new Map());
+  const modelRequests = useRef(new Map());
+  const [coverage, setCoverage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [minScore, setMinScore] = useState(50); // adjustable percentage threshold
   const [selectedMatch, setSelectedMatch] = useState(null);
@@ -32,37 +40,54 @@ export default function SmartMatching() {
   const [preparingPhoto, setPreparingPhoto] = useState(false);
   const [markingMatch, setMarkingMatch] = useState(null);
   const markingRef = useRef(false);
-  const loadingRef = useRef(false);
-  const reloadQueued = useRef(false);
   const requestVersion = useRef(0);
-  const invalidateRequests = useCallback(() => { requestVersion.current++; reloadQueued.current = false; }, []);
+  const invalidateRequests = useCallback(() => { requestVersion.current++; }, []);
 
-  const loadMatches = useCallback(async ({ background = false } = {}) => {
-    if (loadingRef.current) { reloadQueued.current = true; return; }
-    loadingRef.current = true;
+  const loadMatches = useCallback(async ({ background = false, force = false } = {}) => {
+    const model = selectedModelRef.current;
+    const version = ++requestVersion.current;
+    if (force) { modelCache.current.clear(); modelRequests.current.clear(); }
+    const apply = data => {
+      setMatches(data.matches);
+      setStats({ lostCount: data.lost_count, foundCount: data.found_count });
+      setCoverage({ skipped: data.skipped_count || 0, queries: data.query_count, candidates: data.candidate_count });
+      setPageError('');
+    };
+    if (modelCache.current.has(model)) {
+      apply(modelCache.current.get(model)); setLoading(false); return;
+    }
     if (!background) setLoading(true);
     try {
-      do {
-        reloadQueued.current = false;
-        const version = ++requestVersion.current;
-        const res = await authenticatedFetch(`${API_URL}/ai/auto-match`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Unable to load matching results. Please try again.');
-        if (!Array.isArray(data.matches)) throw new Error('Matching returned an invalid response.');
-        if (version !== requestVersion.current) continue;
-        setMatches(data.matches);
-        setStats({ lostCount: data.lost_count, foundCount: data.found_count });
-        setPageError('');
-      } while (reloadQueued.current);
+      let pending = modelRequests.current.get(model);
+      if (!pending) {
+        pending = (async () => {
+          const res = await authenticatedFetch(`${API_URL}/ai/auto-match`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Unable to load model matches. Please try again.');
+          if (!Array.isArray(data.matches)) throw new Error('Matching returned an invalid response.');
+          if (data.model !== model) throw new Error('The API server is running an older matching version. Restart the backend API, then refresh this page.');
+          return data;
+        })().finally(() => { if (modelRequests.current.get(model) === pending) modelRequests.current.delete(model); });
+        modelRequests.current.set(model, pending);
+      }
+      const data = await pending;
+      if (version !== requestVersion.current) return;
+      modelCache.current.set(model, data); apply(data);
     } catch (err) {
-      setPageError(err.message || 'Unable to load matching results.');
+      if (version === requestVersion.current) { setMatches([]); setPageError(err.message || 'Unable to load matching results.'); }
     } finally {
-      loadingRef.current = false;
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }, []);
+  const refreshMatches = useCallback(() => loadMatches({ background: true, force: true }), [loadMatches]);
+  const selectModel = useCallback(model => {
+    if (selectedModelRef.current === model) return;
+    invalidateRequests(); selectedModelRef.current = model;
+    setSelectedModel(model); setMatches([]); setCoverage(null); setPageError('');
+    void loadMatches();
+  }, [invalidateRequests, loadMatches]);
   const loadCategories = useCallback(async () => {
     try {
       const data = await categoriesApi.getAll();
@@ -73,7 +98,7 @@ export default function SmartMatching() {
     void loadMatches(); void loadCategories();
     return invalidateRequests;
   }, [loadMatches, loadCategories, invalidateRequests]);
-  useLiveRefresh(['lost_items', 'found_items', 'matches'], loadMatches);
+  useLiveRefresh(['lost_items', 'found_items', 'matches'], refreshMatches);
   useLiveRefresh('categories', loadCategories);
 
   const filteredMatches = useMemo(() => {
@@ -130,6 +155,8 @@ export default function SmartMatching() {
             {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
         </div></>} />
+      <AlgorithmComparison model={selectedModel} onModelChange={selectModel} />
+      {coverage?.skipped > 0 && <p className="ui-panel p-3 mb-4 text-sm" role="status">{coverage.skipped} report(s) have no usable {['clip', 'resnet50', 'efficientnet-b0'].includes(selectedModel) ? 'photo' : 'description'} and were excluded from this model's results.</p>}
       {/* Adjustable Percentage Slider */}
       <div className="ui-panel p-5 mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -182,7 +209,8 @@ export default function SmartMatching() {
         </div>
       </div>
 
-      {/* Match Results */}
+      {/* Results for the selected model */}
+      <div role="tabpanel" id="model-match-results" aria-labelledby={`model-tab-${selectedModel}`} tabIndex={0}>
       {loading ? (
         <LoadingState label="Loading matching results..." />
       ) : pageError ? (
@@ -206,15 +234,14 @@ export default function SmartMatching() {
                   <span className={`px-3 py-1 rounded-full text-xs font-bold ${getScoreBg(match.score)}`}>
                     {getStatusDot(match.score)} {formatPct(match.score)} Match
                   </span>
-                  <span className="text-xs text-gray-400">
-                    {match.lost_item?.item_id} → {match.found_item?.item_id}
-                  </span>
+
                 </div>
 
                 {/* Lost ← → Found side by side */}
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                     <p className="text-xs font-medium text-red-700 dark:text-red-400 mb-1"><AppIcon name="search" /> Lost</p>
+                    <ItemPhoto item={match.lost_item} size="match" kind="lost" />
                     <ItemDescription description={match.lost_item?.description} compact />
                     <p className="text-xs text-gray-500 mt-1">
                       <AppIcon name="location" /> {match.lost_item?.location}
@@ -224,6 +251,7 @@ export default function SmartMatching() {
                   </div>
                   <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                     <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1"><AppIcon name="box" /> Found</p>
+                    <ItemPhoto item={match.found_item} size="match" kind="found" />
                     <ItemDescription description={match.found_item?.description} compact />
                     <p className="text-xs text-gray-500 mt-1">
                       <AppIcon name="location" /> {match.found_item?.location}
@@ -233,10 +261,10 @@ export default function SmartMatching() {
                   </div>
                 </div>
 
-                {/* Combined Score Bar */}
+                {/* Ranking score for the selected modality */}
                 <div className="mb-2">
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500">Combined</span>
+                    <span className="text-gray-500">Ranking score</span>
                     <span className={`font-bold ${getScoreColor(match.score)}`}>
                       {formatPct(match.score)}
                     </span>
@@ -250,7 +278,7 @@ export default function SmartMatching() {
                 </div>
 
                 {/* Image Similarity */}
-                <div className="mb-2">
+                {match.matching_mode !== 'text' && <div className="mb-2">
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-gray-500"><AppIcon name="image" /> Image</span>
                     <span className={`font-bold ${getScoreColor(match.image_score)}`}>
@@ -263,10 +291,10 @@ export default function SmartMatching() {
                       style={{ width: `${Math.min(100, match.image_score * 100)}%` }}
                     />
                   </div>
-                </div>
+                </div>}
 
                 {/* Text Similarity */}
-                <div className="mb-3">
+                {match.matching_mode !== 'image' && <div className="mb-3">
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-gray-500"><AppIcon name="document" /> Text</span>
                     <span className={`font-bold ${getScoreColor(match.text_score)}`}>
@@ -279,10 +307,10 @@ export default function SmartMatching() {
                       style={{ width: `${Math.min(100, match.text_score * 100)}%` }}
                     />
                   </div>
-                </div>
+                </div>}
 
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
-                  Weighted: 70% image + 30% text
+                  {match.model_name || (match.matching_mode === 'text' ? 'E5-base-v2' : 'CLIP ViT-B/32')}
                 </p>
 
                 {/* Item images side by side */}
@@ -354,11 +382,11 @@ export default function SmartMatching() {
 
                           // 5. Remove from Smart Matching list & show toast
                           setMatches(current => current.filter(m => m.lost_item?.id !== match.lost_item?.id && m.found_item?.id !== match.found_item?.id));
-                          void loadMatches({ background: true });
+                          void loadMatches({ background: true, force: true });
                           showToast('Open Potential matches → View details to verify ownership and release the item.', 'success', 'Marked as Potential Match');
                         } catch (e) {
                           showToast(e.message || 'Unable to record the decision.', 'error');
-                          void loadMatches({ background: true });
+                          void loadMatches({ background: true, force: true });
                         } finally { markingRef.current = false; setMarkingMatch(null); }
                       }}
                       className="ui-button ui-button-success flex-1"
@@ -387,6 +415,7 @@ export default function SmartMatching() {
       )}
 
       {/* Detail Modal */}
+      </div>
       <Modal isOpen={!!selectedMatch} onClose={() => setSelectedMatch(null)} title="Match Details" size="xl">
         {selectedMatch && <MatchComparison match={selectedMatch} />}
       </Modal>
@@ -495,6 +524,7 @@ export default function SmartMatching() {
                     claimMatch.lost_item.status = 'claimed';
                     setMatches([...matches]);
                     setClaimMatch(null);
+                    void loadMatches({ background: true, force: true });
                     showToast('Item claimed. Verification recorded in activity log.', 'success');
                   } catch (e) {
                     showToast(e.message || 'Unable to complete the claim. Please try again.', 'error');

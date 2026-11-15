@@ -570,3 +570,11 @@ button.metric-card:hover { border-color: var(--focus); }
 .high-contrast .category-trend-card { border-width: 2px; }
 @media (min-width: 1600px) { .category-trend-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 850px) { .category-trend-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.item-photo { display: inline-flex; flex: 0 0 auto; width: 56px; height: 56px; align-items: center; justify-content: center; overflow: hidden; border-radius: .65rem; border: 1px solid var(--lf-30-border); background: var(--surface-subtle); vertical-align: middle; }
+.item-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.item-photo-placeholder { padding: .3rem; font-size: .65rem; line-height: 1.25; color: var(--lf-text-muted); text-align: center; overflow-wrap: anywhere; }
+.item-photo-large { width: 76px; height: 76px; border-radius: .85rem; }
+.item-photo-match { width: 100%; height: 140px; margin: .5rem 0 .8rem; }
+.item-photo-match img { object-fit: contain; }
+.collection-photo-pair { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: .4rem; max-width: 120px; }

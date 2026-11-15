@@ -14,8 +14,9 @@ import ReportLocationFields from '../components/common/ReportLocationFields';
 import useReportLocations from '../hooks/useReportLocations';
 import { formatDateTime } from '../utils/formatters';
 import PotentialMatchReview from '../components/common/PotentialMatchReview';
-import CategoryIcon from '../components/common/CategoryIcon';
+import ItemPhoto from '../components/common/ItemPhoto';
 import ReportCancellation from '../components/common/ReportCancellation';
+import EditReportModal from '../components/common/EditReportModal';
 
 export default function LostItems() {
   const { isUnread } = useNotifications();
@@ -29,6 +30,7 @@ export default function LostItems() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedItem, setSelectedItem] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
   const displayedReports = useMemo(() => selectedItem ? [selectedItem] : [], [selectedItem]);
   useMarkVisibleRead('lost', displayedReports);
   const [imageLightbox, setImageLightbox] = useState(null);
@@ -81,7 +83,7 @@ export default function LostItems() {
         if (search) {
           const q = search.toLowerCase();
           const desc = (item.description || '').toLowerCase();
-          const id = (item.item_id || item.id || '').toLowerCase();
+          const id = String(item.item_id || item.id || '').toLowerCase();
           const rep = (item.reporter_name || item.reporterName || '').toLowerCase();
           const loc = (item.location_lost || item.locationLost || '').toLowerCase();
           return desc.includes(q) || id.includes(q) || rep.includes(q) || loc.includes(q);
@@ -235,12 +237,10 @@ export default function LostItems() {
                 <tr key={item.id} className="report-row" data-read-state={isUnread('lost', item.id) ? 'unread' : 'viewed'}>
                   <td data-label="Item" className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center text-lg bg-blue-100 dark:opacity-80">
-                        <CategoryIcon icon={item.category_icon} categoryName={item.category_name || item.categoryName} className="h-6 w-6 text-indigo-600" />
-                      </div>
+                      <ItemPhoto item={item} kind="lost" />
                       <div>
                         <p className="report-item-title text-sm text-gray-900 dark:text-white whitespace-pre-wrap break-words">{item.description || 'No description provided.'}</p>
-                        <div className="report-item-meta"><span className="report-item-id">{item.item_id || item.id}</span><ReportReadState unread={isUnread('lost', item.id)} /></div>
+                        <div className="report-item-meta"><ReportReadState unread={isUnread('lost', item.id)} /></div>
                       </div>
                     </div>
                   </td>
@@ -251,7 +251,7 @@ export default function LostItems() {
                   <td data-label="Reporter" className="px-4 py-3"><span className="text-sm text-gray-600 dark:text-gray-400">{item.reporter_name || item.reporterName}</span></td>
                   <td data-label="Status" className="px-4 py-3"><StatusBadge status={item.status} /></td>
                   <td data-label="Actions" className="px-4 py-3 text-right">
-                    <button type="button" aria-label={'View report ' + (item.item_id || item.id)} onClick={() => setSelectedItem(item)} className="ui-button ui-button-link">View</button>
+                    <button type="button" aria-label={'View ' + (item.description || 'item report')} onClick={() => setSelectedItem(item)} className="ui-button ui-button-link">View</button>
                   </td>
                 </tr>
               ))}
@@ -304,16 +304,15 @@ export default function LostItems() {
         </form>
       </Modal>
 
-      <Modal isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} title={`Details - ${selectedItem?.item_id || selectedItem?.id}`} size="xl">
+      {editingItem && <EditReportModal key={editingItem.id} item={editingItem} kind="lost" categories={categories} onClose={() => { setSelectedItem(editingItem); setEditingItem(null); }} onSaved={updated => { setItems(previous => previous.map(item => String(item.id) === String(updated.id) ? updated : item)); setSelectedItem(updated); setEditingItem(null); setFormSuccess('Report details updated successfully.'); }} />}
+      <Modal isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} title="Lost item details" size="xl">
         {selectedItem && (
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-xl flex items-center justify-center text-3xl bg-blue-100 dark:opacity-80">
-                <CategoryIcon icon={selectedItem.category_icon} categoryName={selectedItem.category_name || selectedItem.categoryName} className="h-9 w-9 text-indigo-600" />
-              </div>
+              <ItemPhoto item={selectedItem} size="large" kind="lost" />
               <div>
                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Lost item report</h4>
-                <p className="text-sm text-gray-500">{selectedItem.item_id || selectedItem.id}</p>
+
               </div>
             </div>
             {selectedItem.image && (
@@ -326,6 +325,7 @@ export default function LostItems() {
                 />
               </div>
             )}
+            <button type="button" className="ui-button ui-button-primary" onClick={() => { setEditingItem(selectedItem); setSelectedItem(null); }}>Edit report details</button>
             <ItemDescription description={selectedItem.description} />
             <div className="grid grid-cols-2 gap-4">
               <div><p className="text-xs text-gray-500">Category</p><p className="text-sm font-medium text-gray-900 dark:text-white">{selectedItem.category_name || selectedItem.categoryName}</p></div>

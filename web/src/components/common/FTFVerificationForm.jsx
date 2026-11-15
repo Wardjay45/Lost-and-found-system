@@ -47,7 +47,7 @@ export default function FTFVerificationForm({ lostItem, onComplete, onCancel }) 
     loadPotentialMatch(lostItem.id, 'lost_items', request, { signal: controller.signal })
       .then(match => {
         if (controller.signal.aborted) return;
-        if (match?.found_item?.id) { setFoundItemId(String(match.found_item.id)); setFoundItemName(match.found_item.description || match.found_item.item_id || ''); setAutoMatched(true); }
+        if (match?.found_item?.id) { setFoundItemId(String(match.found_item.id)); setFoundItemName(match.found_item.description || 'Found item'); setAutoMatched(true); }
       })
       .catch(error => { if (!controller.signal.aborted) setMatchError(error.message || 'Unable to load the saved match.'); })
       .finally(() => { if (!controller.signal.aborted) setLoadingMatch(false); });

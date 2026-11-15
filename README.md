@@ -58,6 +58,12 @@ python -m uvicorn main:app --reload --port 8000
 
 The Express API calls this service on port 8000 by default for matching features.
 
+### Algorithm comparison
+
+Open **Smart matching** in the admin dashboard. Choose Image matching or Text matching, then click a model tab. Existing active lost and found reports are matched automatically using that model. There are no manual query/candidate fields or extra method dropdown. The image tabs are CLIP ViT-B/32, ResNet50 and EfficientNet-B0; the text tabs are E5-base-v2, all-MiniLM-L6-v2 and all-mpnet-base-v2. Features are computed independently for each model and cached temporarily in server memory without overwriting production embedding columns. Returning to a tab reuses its results until reports change. Reports without a usable photo or description are counted as excluded. Live suggestions show cosine similarity, not accuracy metrics, because verified retrieval ground truth is unavailable. Use the Colab labeled dataset experiment for formal metrics.
+
+Restart both the API and AI service after installing the updated AI requirements. Local first use downloads missing public weights. Alternative models use a one-model memory cache. For hosted AI, set `BUNDLE_COMPARISON_MODELS=1` during the AI build before running `cache_models.py`; this bundles the additional weights and avoids downloads during serverless requests. Administrator matching uses the selected image or text model. Existing mobile search continues using CLIP for images or E5 for descriptions. Weighted image/text fusion is paused. The legacy `/combined-search` route accepts `mode: image|text`; callers without a mode use image when supplied, otherwise text. Legacy weight fields no longer affect runtime rankings. Historical offline fusion experiments remain in `evaluate.py` for reproducibility. Comparison results are not written to item records. The report model endpoint resizes images to a maximum dimension of 512 pixels, so use Colab with its original-image protocol for your formal dataset evaluation. Model tabs switch between computed results without repeating inference.
+
 ## Hosting
 
 The root Vercel project builds the web admin and serves its Express API. The Python models deploy as a separate AI project. See [deployment setup](docs/deployment.md) for environment variables, mobile configuration and verification. Keep all real .env files and deployment credentials out of Git.

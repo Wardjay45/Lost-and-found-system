@@ -1,3 +1,4 @@
+import ItemPhoto from '../components/common/ItemPhoto';
 import { unclaimedReports } from '../../../shared/unclaimed.mjs';
 import AppIcon from '../components/common/AppIcon';
 import { PageHeader, DataRegion } from '../components/common/UI';
@@ -110,12 +111,10 @@ export default function UnclaimedItems() {
                       className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                     >
                       <td data-label="Item" className="px-5 py-3.5">
+                        <div className="flex items-center gap-3"><ItemPhoto item={item} kind="found" /><div>
                         <p className="font-medium text-gray-900 dark:text-white truncate max-w-[250px]">
                           {item.description || 'No description'}
-                        </p>
-                        {item.item_id && (
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">ID: {item.item_id}</p>
-                        )}
+                        </p></div></div>
                       </td>
                       <td data-label="Category" className="px-5 py-3.5">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
