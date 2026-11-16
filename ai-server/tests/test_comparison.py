@@ -4,6 +4,11 @@ from fastapi.testclient import TestClient
 from comparison_metrics import rank_scores, summarize_ranking
 from model_comparison import create_comparison_router
 import torch
+import base64
+import io
+from types import SimpleNamespace
+from PIL import Image
+from report_image_preprocessing import prepare_report_image
 
 
 class FakeTextModel:
@@ -13,6 +18,54 @@ class FakeTextModel:
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_image_endpoints_use_the_same_preprocessing_and_projection(self):
+        sizes = []
+
+        class Processor:
+            def __call__(self, images, return_tensors):
+                sizes.extend(image.size for image in images)
+                return type('Batch', (dict,), {'to': lambda self, device: self})(
+                    pixel_values=torch.tensor([
+                        [float(image.getpixel((0, 0))[0]) + 1., 1.]
+                        for image in images]))
+
+        class Clip:
+            def vision_model(self, pixel_values):
+                return SimpleNamespace(pooler_output=pixel_values)
+
+            def visual_projection(self, values):
+                return values
+
+        def image_data(color):
+            stream = io.BytesIO()
+            Image.new('RGB', (1200, 800), color).save(stream, format='PNG')
+            return 'data:image/png;base64,' + base64.b64encode(stream.getvalue()).decode()
+
+        app = FastAPI()
+        app.include_router(create_comparison_router(lambda: (Clip(), Processor()), lambda: None,
+                           lambda: torch.device('cpu'), lambda name, fallback: fallback))
+        client = TestClient(app)
+        items = [{'id': 'q', 'image': image_data('red')},
+                 {'id': 'a', 'image': image_data('red')},
+                 {'id': 'b', 'image': image_data('blue')}]
+        embedded = client.post('/comparison/embeddings', json={'model': 'clip', 'items': items})
+        self.assertEqual(embedded.status_code, 200, embedded.text)
+        ranked = client.post('/comparison/run', json={'model': 'clip', 'query': items[0],
+                             'candidates': items[1:], 'relevant_ids': ['a']})
+        self.assertEqual(ranked.status_code, 200, ranked.text)
+        self.assertEqual(ranked.json()['ranking'][0]['id'], 'a')
+        self.assertAlmostEqual(ranked.json()['ranking'][0]['score'], 1., places=5)
+        self.assertTrue(all(size == (512, 341) for size in sizes))
+
+    def test_preparation_preserves_original_and_is_idempotent(self):
+        original = Image.new('RGBA', (1200, 800), 'red')
+        prepared = prepare_report_image(original)
+        self.assertEqual(original.size, (1200, 800))
+        self.assertEqual(original.mode, 'RGBA')
+        self.assertEqual(prepared.size, (512, 341))
+        self.assertEqual(prepared.mode, 'RGB')
+        self.assertEqual(prepare_report_image(prepared).tobytes(), prepared.tobytes())
+
     def test_metrics_and_ties(self):
         ranked = rank_scores(['a', 'b', 'c', 'd', 'e', 'f'], [.9, .8, .8, .4, .3, .2])
         self.assertEqual([r['id'] for r in ranked][:3], ['a', 'b', 'c'])

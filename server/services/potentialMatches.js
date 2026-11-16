@@ -42,5 +42,10 @@ export async function loadReportPair(client, pair) {
     return { ...data, location: source === 'lost_items' ? data.location_lost : data.location_found };
   };
   const [lost, found] = await Promise.all([fetchReport('lost_items', pair.lostId), fetchReport('found_items', pair.foundId)]);
-  return { lost_item: lost, found_item: found, score: score(pair.details.score), image_score: score(pair.details.image_score), text_score: score(pair.details.text_score) };
+  return {
+    lost_item: lost, found_item: found,
+    score: score(pair.details.score), image_score: score(pair.details.image_score), text_score: score(pair.details.text_score),
+    ...(['image', 'text'].includes(pair.details.matching_mode) ? { matching_mode: pair.details.matching_mode } : {}),
+    ...(typeof pair.details.model_name === 'string' ? { model_name: pair.details.model_name } : {}),
+  };
 }

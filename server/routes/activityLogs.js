@@ -81,6 +81,8 @@ export function createActivityLogsRouter({ client = supabase, jwtSecret = () => 
       if (score === null) fail(400, 'Similarity scores are invalid. Matching results will update automatically.');
       details[key] = score;
     }
+    if (details.matching_mode !== undefined && !['image', 'text'].includes(details.matching_mode)) fail(400, 'Choose image or text matching.');
+    if (details.model_name !== undefined && (typeof details.model_name !== 'string' || !details.model_name.trim() || details.model_name.length > 80)) fail(400, 'Matching model is invalid.');
     const getItem = async (table, id) => {
       const columns = table === 'lost_items' ? 'id,item_id,status,description,reporter_name,reporter_id,last_updated' : 'id,item_id,status,description,last_updated';
       const { data, error } = await client.from(table).select(columns).eq('id', Number(id)).maybeSingle();
@@ -107,6 +109,8 @@ export function createActivityLogsRouter({ client = supabase, jwtSecret = () => 
       lost_item_id: lost.id, found_item_id: found.id, lost_item_name: lost.description, found_item_name: found.description,
       lost_reporter_name: lost.reporter_name || '', lost_reporter_id: lost.reporter_id || '',
       score: details.score, image_score: details.image_score ?? 0, text_score: details.text_score ?? 0,
+      ...(details.matching_mode ? { matching_mode: details.matching_mode } : {}),
+      ...(details.model_name ? { model_name: details.model_name.trim() } : {}),
     };
     // Save the exact pair first: a failed log insert must never leave status-only
     // potential reports. Keep this association on a later failure so retries work.

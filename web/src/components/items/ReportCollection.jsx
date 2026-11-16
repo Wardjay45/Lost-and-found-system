@@ -7,9 +7,8 @@ import useNotifications from '../../hooks/useNotifications';
 import useMarkVisibleRead from '../../hooks/useMarkVisibleRead';
 import { PageHeader, DataRegion } from '../common/UI';
 import AppIcon from '../common/AppIcon';
-import ItemPhoto from '../common/ItemPhoto';
+import ReportItemSummary from '../common/ReportItemSummary';
 import StatusBadge from '../common/StatusBadge';
-import ReportReadState from '../common/ReportReadState';
 import ItemDescription from '../common/ItemDescription';
 import Modal from '../common/Modal';
 import PotentialMatchReview from '../common/PotentialMatchReview';
@@ -88,9 +87,11 @@ export default function ReportCollection({ collection }) {
     </div>
     </div>
     <DataRegion loading={loading || collection === 'potential' && !potentialReady && !notificationError} error={error || (collection === 'potential' && !potentialReady ? notificationError : '')} onRetry={load} empty={filtered.length === 0} emptyTitle={hasFilters ? 'No matching reports' : config.empty} emptyDescription={hasFilters ? collection === 'potential' ? 'Try another item, name or location.' : 'Try another search or choose all report types.' : config.hint}>
-      <div className="ui-panel collection-table-panel"><div className="collection-table-scroll"><table className="ui-table responsive-table collection-table"><thead><tr><th>Item / description</th><th>{collection === 'potential' ? 'People' : 'Report type'}</th><th>Category</th><th>Location</th><th>{collection === 'claimed' ? 'Claimed on' : 'Report dates'}</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      <div className="ui-panel collection-table-panel"><div className="collection-table-scroll report-table-scroll" role="region" aria-label={config.title + ' reports'} tabIndex={0}><table className="ui-table responsive-table collection-table report-table report-table-collection">
+        <colgroup><col className="report-col-item" /><col className="report-col-type" /><col className="report-col-category" /><col className="report-col-location" /><col className="report-col-date" /><col className="report-col-status" /><col className="report-col-actions" /></colgroup>
+        <thead><tr><th>Item / description</th><th>{collection === 'potential' ? 'People' : 'Report type'}</th><th>Category</th><th>Location</th><th>{collection === 'claimed' ? 'Claimed on' : 'Report dates'}</th><th>Status</th><th>Actions</th></tr></thead><tbody>
         {pageRows.map(item => <tr key={item.collectionKey} className="report-row" data-read-state={rowUnread(item) ? 'unread' : 'viewed'}>
-          <td data-label="Item"><div className="collection-item"><div className="collection-photo-pair"><ItemPhoto item={item} kind={item.reportType} />{item.pairedItem && <ItemPhoto item={item.pairedItem} kind="found" />}</div><div><p className="report-item-title">{item.description || 'No description provided.'}</p>{item.pairedItem && <p className="collection-muted">Found: {item.pairedItem.description || 'No description provided.'}</p>}<div className="report-item-meta"><ReportReadState unread={rowUnread(item)} /></div></div></div></td>
+          <td data-label="Item"><ReportItemSummary item={item} kind={item.reportType} pairedItem={item.pairedItem} unread={rowUnread(item)} /></td>
           <td data-label={collection === 'potential' ? 'People' : 'Report type'}>{collection === 'potential' ? <><span className="collection-person">Reported by: {item.reportedBy || 'Not recorded'}</span>{item.pairedItem && <span className="collection-person">Found by: {item.pairedItem.reportedBy || 'Not recorded'}</span>}</> : <><span className="collection-type"><AppIcon name={item.reportType === 'lost' ? 'search' : 'box'} />{item.reportType === 'lost' ? 'Lost report' : 'Found report'}</span><span className="collection-person">{item.reportedBy || 'Not recorded'}</span></>}</td>
           <td data-label="Category">{item.category_name || 'Not recorded'}</td><td data-label="Location">{item.reportLocation || 'Not recorded'}</td>
           <td data-label={collection === 'claimed' ? 'Claimed on' : 'Report dates'}>

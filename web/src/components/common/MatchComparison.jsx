@@ -37,20 +37,19 @@ function ReportCard({ item, kind, onPreview }) {
 
 export default function MatchComparison({ match }) {
   const [preview, setPreview] = useState(null);
-  const combined = scorePercent(match.score);
-  const bothScores = match.image_score > 0 && match.text_score > 0;
+  const mode = ['image', 'text'].includes(match.matching_mode) ? match.matching_mode : null;
+  const label = mode === 'image' ? 'Image similarity' : 'Text similarity';
+  const percent = mode ? scorePercent(match[`${mode}_score`]) : null;
   return <div className="match-comparison">
-    <div className="match-summary"><div><h3>Compare reports</h3><p>Review the photos, locations, and additional information.</p></div><span className="match-similarity">{combined === null ? 'Score unavailable' : `${combined}% similarity`}</span></div>
+    <div className="match-summary"><div><h3>Compare reports</h3><p>Review the photos, locations, and additional information.</p></div></div>
     <div className="match-report-grid"><ReportCard kind="lost" item={match.lost_item} onPreview={setPreview} /><ReportCard kind="found" item={match.found_item} onPreview={setPreview} /></div>
-    <section className="match-score-panel" aria-label="Similarity breakdown">
-      <h3>Similarity breakdown</h3>
-      <div className="match-score-grid">{[['Ranking score', match.score], ['Image similarity', match.matching_mode === 'text' ? null : match.image_score], ['Text similarity', match.matching_mode === 'image' ? null : match.text_score]].map(([label, score]) => {
-        const percent = scorePercent(score);
-        return <div className="match-score" key={label}><div><span>{label}</span><strong>{percent === null ? 'Unavailable' : `${percent}%`}</strong></div>
+    <section className="match-score-panel" aria-label={mode ? label : 'Matching information'}>
+      {mode ? <>
+        <div className="match-score"><div><h3>{label}</h3><strong>{percent === null ? 'Unavailable' : `${percent}%`}</strong></div>
           {percent !== null && <div className="match-score-track" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>}
-        </div>;
-      })}</div>
-      <p>{match.matching_mode === 'image' ? `Ranked using image similarity only (${match.model_name || 'CLIP'}).` : match.matching_mode === 'text' ? `Ranked using text similarity only (${match.model_name || 'E5'}).` : bothScores ? 'Previously saved image and text scores are shown for reference.' : 'Similarity scores are shown when comparison data is available.'}</p>
+        </div>
+        <p>Selected using {mode} matching{match.model_name ? ` · ${match.model_name}` : ''}.</p>
+      </> : <p>The matching type was not recorded for this saved match.</p>}
     </section>
     <Modal isOpen={!!preview} onClose={() => setPreview(null)} title={preview?.label || 'Item photo'} size="xl"><img className="image-preview" src={preview?.src} alt={preview?.label || 'Item photo'} /></Modal>
   </div>;

@@ -14,6 +14,7 @@ import torch
 import torch.nn.functional as F
 
 from comparison_metrics import rank_scores, summarize_ranking
+from report_image_preprocessing import prepare_report_image, REPORT_IMAGE_PROFILE
 
 MODELS = {
     'clip': {'name': 'CLIP ViT-B/32', 'modality': 'image'},
@@ -153,8 +154,7 @@ def create_comparison_router(get_clip, get_text_model, get_device, model_source)
         inputs = ([item.text.strip() for item in request.items] if modality == 'text'
                   else [decode_image(item.image) for item in request.items])
         if modality == 'image':
-            for image in inputs:
-                image.thumbnail((512, 512))
+            inputs = [prepare_report_image(image) for image in inputs]
         with inference_lock, torch.inference_mode():
             try:
                 vectors = encoder(request.model)(inputs).detach().cpu().tolist()
@@ -162,6 +162,7 @@ def create_comparison_router(get_clip, get_text_model, get_device, model_source)
                 logging.getLogger(__name__).exception('Report model %s failed', request.model)
                 raise HTTPException(503, f'{MODELS[request.model]["name"]} is unavailable. Check the AI service and installed model weights.') from exc
         return {'model': request.model, 'modality': modality,
+                'image_preprocessing': REPORT_IMAGE_PROFILE if modality == 'image' else None,
                 'items': [{'id': item.id, 'embedding': vector} for item, vector in zip(request.items, vectors)]}
 
     @router.post('/run')
@@ -170,6 +171,8 @@ def create_comparison_router(get_clip, get_text_model, get_device, model_source)
         values = [request.query, *request.candidates]
         inputs = ([item.text.strip() for item in values] if modality == 'text'
                   else [decode_image(item.image) for item in values])
+        if modality == 'image':
+            inputs = [prepare_report_image(image) for image in inputs]
         with inference_lock, torch.inference_mode():
             try:
                 encode = encoder(request.model)

@@ -122,6 +122,7 @@ router.post('/auto-match', async (req, res) => {
     if (mode != null && !['image', 'text'].includes(mode)) return res.status(400).json({ error: 'Select image or text matching.' });
     const selectedModel = req.body?.model;
     if (selectedModel != null && !Object.hasOwn(REPORT_MODELS, selectedModel)) return res.status(400).json({ error: 'Select a supported matching model.' });
+    if (req.body?.refresh !== undefined && typeof req.body.refresh !== 'boolean') return res.status(400).json({ error: 'Refresh must be true or false.' });
     // Matching rules:
     // - Lost items: only 'active' (pending = not yet approved, potential_match/matched/claimed = already matched)
     // - Found items: only 'active' (potential_match/matched/claimed = already matched)
@@ -144,7 +145,7 @@ router.post('/auto-match', async (req, res) => {
     }
 
     if (selectedModel) {
-      const result = await matchReportsWithModel(lostItems, foundItems, selectedModel);
+      const result = await matchReportsWithModel(lostItems, foundItems, selectedModel, { refresh: req.body?.refresh === true });
       const report = (item, kind) => ({ id: item.id, item_id: item.item_id, description: item.description,
         category_name: item.category_name, location: kind === 'lost' ? item.location_lost : item.location_found || item.location_lost,
         location_details: item.location_details, last_updated: item.last_updated, image: item.image_url || item.image,

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { aiFetch } from './aiClient.js';
+import { reportFeatureStore } from './reportFeatureStore.js';
 
 export const REPORT_MODELS = {
   clip: { name: 'CLIP ViT-B/32', mode: 'image' },
@@ -11,6 +12,7 @@ export const REPORT_MODELS = {
 };
 
 const cache = new Map();
+const inFlightByCache = new WeakMap();
 const MAX_CACHE = 1024;
 const TTL = 5 * 60 * 1000;
 
@@ -45,44 +47,97 @@ function cosine(a, b) {
   return Math.max(-1, Math.min(1, score));
 }
 
-export async function matchReportsWithModel(lostItems, foundItems, model, { fetchAi = aiFetch, fetchPhoto = fetch } = {}) {
+export async function matchReportsWithModel(lostItems, foundItems, model, {
+  fetchAi = aiFetch, fetchPhoto = fetch, refresh = false,
+  featureStore = reportFeatureStore, featureCache = cache,
+} = {}) {
   if (!Object.hasOwn(REPORT_MODELS, model)) throw new Error('Unknown matching model.');
   const spec = REPORT_MODELS[model];
-  const prepared = [];
+  const rows = [];
   let skipped = 0;
   for (const [kind, items] of [['lost', lostItems], ['found', foundItems]]) {
     for (const item of items) {
       const content = spec.mode === 'text' ? item.description?.trim() : item.image_url || item.image;
       if (!content) { skipped++; continue; }
-      const key = `${model}:v1:${createHash('sha256').update(content).digest('hex')}`;
-      const cached = cache.get(key);
-      if (cached && cached.expires <= Date.now()) cache.delete(key);
-      const row = { item, kind, id: `${kind}:${item.id}`, key, vector: cache.get(key)?.vector };
-      if (!row.vector) {
-        try {
-          row.input = spec.mode === 'text' ? { id: row.id, text: content } : { id: row.id, image: await reportPhoto(content, fetchPhoto) };
-        } catch { skipped++; continue; }
+      // Text depends on its content, not status timestamps. Photo revisions are
+      // retained because bytes can be replaced at an unchanged Storage URL.
+      const imageRevision = Array.isArray(item.image_embedding) && item.image_embedding.length === 512
+        ? item.image_embedding : item.last_updated || '';
+      const key = `${model}:report-image-v1:${createHash('sha256').update(JSON.stringify([content, spec.mode === 'image' ? imageRevision : ''])).digest('hex')}`;
+      rows.push({ item, kind, id: `${kind}:${item.id}`, key, content });
+    }
+  }
+  for (let start = 0; start < rows.length; start += 8) {
+    await Promise.all(rows.slice(start, start + 8).map(async row => {
+      const cached = featureCache.get(row.key);
+      if (cached && cached.expires <= Date.now()) featureCache.delete(row.key);
+      row.vector = refresh ? undefined : featureCache.get(row.key)?.vector;
+      if (!refresh && !row.vector) {
+        // E5 uses the same model and query prefix as /embedding/text. Other
+        // models, including CLIP's report-photo preprocessing, stay isolated.
+        const stored = model === 'e5' && row.item.text_embedding;
+        if (Array.isArray(stored) && stored.length === 768) {
+          try { row.vector = normalize(stored); } catch { /* Prepare invalid stored features again. */ }
+        }
+        if (!row.vector && featureStore) {
+          const vector = await featureStore.get(row.key);
+          if (vector) { try { row.vector = normalize(vector); } catch { /* Rebuild a corrupt cache entry. */ } }
+        }
       }
-      prepared.push(row);
-    }
+      if (row.vector) {
+        featureCache.set(row.key, { vector: row.vector, expires: Date.now() + TTL });
+      } else {
+        try {
+          row.input = spec.mode === 'text' ? { id: row.id, text: row.content } : { id: row.id, image: await reportPhoto(row.content, fetchPhoto) };
+        } catch { row.skipped = true; skipped++; }
+      }
+    }));
   }
+  const prepared = rows.filter(row => !row.skipped);
+  // Background report preparation and an open admin page can overlap. Share
+  // unfinished features rather than sending the same photo to the AI twice.
+  if (!refresh) for (const row of prepared) row.vector ||= featureCache.get(row.key)?.vector;
   const pending = prepared.filter(row => !row.vector);
-  for (let start = 0; start < pending.length; start += 8) {
-    const batch = pending.slice(start, start + 8);
-    const response = await fetchAi(`${process.env.AI_SERVER_URL || 'http://localhost:8000'}/comparison/embeddings`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, items: batch.map(row => row.input) }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `${spec.name} could not process these reports.`);
-    if (data.model !== model || !Array.isArray(data.items) || data.items.length !== batch.length || new Set(data.items.map(row => row.id)).size !== batch.length) throw new Error('The AI service returned incomplete report features.');
-    for (const row of batch) {
-      row.vector = normalize(data.items.find(result => result.id === row.id)?.embedding);
-      cache.delete(row.key);
-      cache.set(row.key, { vector: row.vector, expires: Date.now() + TTL });
-      if (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
+  let inFlight = inFlightByCache.get(featureCache);
+  if (!inFlight) { inFlight = new Map(); inFlightByCache.set(featureCache, inFlight); }
+  const owned = [];
+  for (const row of pending) {
+    row.requestKey = refresh ? Symbol(row.key) : row.key;
+    row.request = inFlight.get(row.requestKey);
+    if (!row.request) {
+      const request = {};
+      request.promise = new Promise((resolve, reject) => { request.resolve = resolve; request.reject = reject; });
+      request.promise.catch(() => {}); // A later batch can fail before this row is awaited.
+      row.request = request; inFlight.set(row.requestKey, request); owned.push(row);
     }
   }
+  try {
+    for (let start = 0; start < owned.length; start += 8) {
+      const batch = owned.slice(start, start + 8);
+      const response = await fetchAi(`${process.env.AI_SERVER_URL || 'http://localhost:8000'}/comparison/embeddings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, items: batch.map(row => row.input) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `${spec.name} could not process these reports.`);
+      if (data.model !== model || !Array.isArray(data.items) || data.items.length !== batch.length || new Set(data.items.map(row => row.id)).size !== batch.length) throw new Error('The AI service returned incomplete report features.');
+      for (const row of batch) {
+        row.vector = normalize(data.items.find(result => result.id === row.id)?.embedding);
+        featureCache.delete(row.key);
+        featureCache.set(row.key, { vector: row.vector, expires: Date.now() + TTL });
+      }
+      if (featureStore) await Promise.all(batch.map(row => featureStore.set(row.key, row.vector)));
+      for (const row of batch) { row.request.resolve(row.vector); inFlight.delete(row.requestKey); }
+    }
+  } catch (error) {
+    for (const row of owned) {
+      row.request.reject(error);
+      if (inFlight.get(row.requestKey) === row.request) inFlight.delete(row.requestKey);
+    }
+    throw error;
+  }
+  await Promise.all(pending.map(async row => { row.vector = await row.request.promise; }));
+  while (featureCache.size > MAX_CACHE) featureCache.delete(featureCache.keys().next().value);
   const queries = prepared.filter(row => row.kind === 'lost');
   const candidates = prepared.filter(row => row.kind === 'found');
   const pairs = [];
@@ -93,4 +148,11 @@ export async function matchReportsWithModel(lostItems, foundItems, model, { fetc
   }
   pairs.sort((a, b) => b.score - a.score);
   return { pairs, skipped, query_count: queries.length, candidate_count: candidates.length, mode: spec.mode, model_name: spec.name };
+}
+
+// Run during report preparation, without creating or confirming a match.
+export async function warmReportModelFeatures(item, kind, options = {}) {
+  if (!item?.image && !item?.image_url) return;
+  if (!['lost', 'found'].includes(kind)) throw new Error('Unknown report type.');
+  await matchReportsWithModel(kind === 'lost' ? [item] : [], kind === 'found' ? [item] : [], 'clip', options);
 }

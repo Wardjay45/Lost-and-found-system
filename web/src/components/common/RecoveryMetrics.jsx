@@ -50,10 +50,6 @@ export default function RecoveryMetrics() {
             <p className="recovery-group-note"><AppIcon name="info" /><span>General app feedback is listed below and is excluded from these figures. A dash means there is no data to calculate the measure yet.</span></p>
           </section>
         </div>
-        <section className="ui-panel recovery-group recovery-trends" aria-labelledby="recovery-trends-title">
-          <header className="recovery-group-heading"><span className="recovery-group-icon"><AppIcon name="chart" /></span><div><h3 id="recovery-trends-title">Monthly trends</h3><p>Returns and owner ratings grouped by the month of handover.</p></div></header>
-          {summary.monthly.length > 0 ? <div className="recovery-trend-scroll" tabIndex={0} role="region" aria-label="Monthly recovery trends table"><table className="ui-table recovery-trend-table"><caption className="sr-only">Recovery and satisfaction trends by handover month</caption><thead><tr><th scope="col">Handover month</th><th scope="col">Confirmed recoveries</th><th scope="col">Average time to find</th><th scope="col">Average owner rating</th><th scope="col">Recovery responses</th></tr></thead><tbody>{summary.monthly.map(month => <tr key={month.month}><th scope="row">{month.month}</th><td>{month.confirmed_recoveries}</td><td>{hoursLabel(month.average_hours)}</td><td>{month.average_rating === null ? '—' : month.average_rating.toFixed(1) + ' / 5'}</td><td>{month.responses}</td></tr>)}</tbody></table></div> : <p className="recovery-trends-empty">Monthly trends will appear after the first confirmed handover.</p>}
-        </section>
         <p className="recovery-tracking-note"><AppIcon name="shield" /><span>Tracking started {new Date(summary.tracking_started_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}. Only recorded, verified handovers are included.</span></p>
       </>}
     </DataRegion>

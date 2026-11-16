@@ -36,6 +36,7 @@ export default function CategoryForecastAnalytics() {
   const hasForecast = data?.categories.some(row => row.metrics.some(metric => metric.forecast_status === 'ok' && Number.isFinite(metric.expected_reports)));
   const dark = settings.darkMode || settings.colorTheme === 'midnight';
   const text = settings.highContrast ? (dark ? '#ffffff' : '#111827') : dark ? '#c5d0e5' : '#526079';
+  const font = { size: settings.textSize === 'xlarge' ? 15 : settings.textSize === 'large' ? 14 : 12 };
   const options = {
     responsive: true, maintainAspectRatio: false, animation: false,
     interaction: { mode: 'index', intersect: false },
@@ -44,8 +45,8 @@ export default function CategoryForecastAnalytics() {
       tooltip: { filter: item => item.raw !== null && (item.datasetIndex === 0 || item.dataIndex === item.dataset.data.length - 1), callbacks: { label: item => item.dataset.label + ': ' + new Intl.NumberFormat('en', { maximumFractionDigits: 2 }).format(item.raw) + (item.datasetIndex === 0 ? ' recorded reports' : ' expected reports') } },
     },
     scales: {
-      x: { ticks: { color: text, maxRotation: 0, maxTicksLimit: 7, font: { size: 10 } }, grid: { display: false } },
-      y: { beginAtZero: true, ticks: { color: text, precision: 0, maxTicksLimit: 5 }, grid: { color: dark ? '#303d58' : '#e8edf5' } },
+      x: { ticks: { color: text, maxRotation: 0, maxTicksLimit: 7, font }, grid: { display: false } },
+      y: { beginAtZero: true, ticks: { color: text, font, precision: 0, maxTicksLimit: 5 }, grid: { color: dark ? '#303d58' : '#e8edf5' } },
     },
   };
   const download = () => {

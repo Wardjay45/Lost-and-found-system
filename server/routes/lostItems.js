@@ -1,4 +1,5 @@
 import { createEditReportHandler } from '../services/editReport.js';
+import { warmReportModelFeatures } from '../services/reportModelMatching.js';
 import { cancelItemReport, validateStatusChange } from '../services/reportStatus.js';
 import { backgroundTask } from '../services/backgroundTask.js';
 import { aiFetch } from '../services/aiClient.js';
@@ -16,7 +17,7 @@ const router = Router();
 const AI_URL = process.env.AI_SERVER_URL || 'http://localhost:8000';
 
 // Generate embeddings in background (uses JSON base64 endpoint, NOT multipart)
-const generateEmbeddings = async (itemId, table, imageUrl, description) => {
+const generateEmbeddings = async (itemId, table, imageUrl, description, report) => {
   try {
     const updates = {};
 
@@ -84,6 +85,7 @@ const generateEmbeddings = async (itemId, table, imageUrl, description) => {
     } else {
       console.log(`⚠️ No embeddings generated for ${table}#${itemId}`);
     }
+    await warmReportModelFeatures({ ...report, ...updates }, 'lost');
   } catch (e) {
     console.log(`❌ Embedding failed for ${table}#${itemId}:`, e.message);
   }
@@ -158,7 +160,7 @@ router.post('/upload', upload.single('image'), async (req, res) => {
       .select().single();
     if (error) throw error;
 
-    backgroundTask(generateEmbeddings(data.id, 'lost_items', imageUrl, description));
+    backgroundTask(generateEmbeddings(data.id, 'lost_items', imageUrl, description, data));
     res.status(201).json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -233,7 +235,7 @@ router.post('/', async (req, res) => {
       .select().single();
     if (error) throw error;
     // Generate AI embeddings in background (don't block response)
-    backgroundTask(generateEmbeddings(data.id, 'lost_items', imageUrl, description));
+    backgroundTask(generateEmbeddings(data.id, 'lost_items', imageUrl, description, data));
     res.status(201).json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });

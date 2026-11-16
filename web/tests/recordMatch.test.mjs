@@ -23,3 +23,17 @@ test('float32 scores displayed as 100% are bounded before saving; invalid scores
   }
   assert.equal(calls.length, 1);
 });
+
+test('recording a match preserves the selected matching type and model, including zero similarity', async () => {
+  for (const [mode, model] of [['image', 'ResNet50'], ['text', 'E5-base-v2']]) {
+    let saved;
+    await recordPotentialMatch({
+      lost_item: { id: 11 }, found_item: { id: 22 }, score: 0,
+      image_score: mode === 'image' ? 0 : null, text_score: mode === 'text' ? 0 : null,
+      matching_mode: mode, model_name: model,
+    }, { activityLogsApi: { create: async body => { saved = JSON.parse(body.details); } } });
+    assert.equal(saved.matching_mode, mode);
+    assert.equal(saved.model_name, model);
+    assert.equal(saved[`${mode}_score`], 0);
+  }
+});

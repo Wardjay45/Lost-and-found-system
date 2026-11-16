@@ -96,16 +96,22 @@ export default function Analytics() {
   const dark = settings.darkMode || settings.colorTheme === 'midnight';
   const text = settings.highContrast ? (dark ? '#ffffff' : '#111827') : dark ? '#b8c5dc' : '#526079';
   const grid = dark ? '#303d58' : '#e8edf5';
+  const font = { size: settings.textSize === 'xlarge' ? 16 : settings.textSize === 'large' ? 15 : 13 };
   const options = {
     responsive: true, maintainAspectRatio: false, animation: false,
-    plugins: { legend: { position: 'top', labels: { color: text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 8, padding: 16 } } },
-    scales: { x: { grid: { display: false }, ticks: { color: text, maxRotation: 35 } }, y: { beginAtZero: true, grid: { color: grid }, ticks: { color: text, precision: 0 } } },
+    plugins: { legend: { position: 'top', labels: { color: text, font, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 8, padding: 16 } } },
+    scales: { x: { grid: { display: false }, ticks: { color: text, font, maxRotation: 35 } }, y: { beginAtZero: true, grid: { color: grid }, ticks: { color: text, font, precision: 0 } } },
   };
-  const categoryOptions = { ...options, scales: { ...options.scales, x: { ...options.scales.x, ticks: { color: text, autoSkip: false, maxRotation: 35, minRotation: 0 } } } };
+  const categoryOptions = { ...options, scales: { ...options.scales, x: { ...options.scales.x, ticks: { color: text, font, autoSkip: false, maxRotation: 35, minRotation: 0 } } } };
 
   return <div className="page page-analytics">
     <PageHeader title="Analytics" description="Your lost and found reports at a glance." />
-    <DataRegion loading={pageLoading} error={pageError} onRetry={load}>
+    <DataRegion loading={pageLoading} error={pageError} onRetry={load} loadingFallback={
+      <div role="status" aria-label="Loading analytics totals">
+        <span className="sr-only">Loading analytics totals...</span>
+        <div className="metric-grid" aria-hidden="true">{['Lost reports', 'Found reports', 'Potential matches', 'Claimed items'].map(label => <div className="metric-card metric-skeleton ui-panel" key={label}><p className="metric-label">{label}</p><span className="metric-skeleton-value" /><span className="metric-skeleton-caption" /></div>)}</div>
+      </div>
+    }>
       <div className="metric-grid">
         <StatCard title="Lost reports" value={stats.totalLostItems || 0} icon="search" />
         <StatCard title="Found reports" value={stats.totalFoundItems || 0} icon="box" />

@@ -73,7 +73,7 @@ export default function SmartMatching() {
         modelRequests.current.set(model, pending);
       }
       const data = await pending;
-      if (version !== requestVersion.current) return;
+      if (version !== requestVersion.current || selectedModelRef.current !== model) return;
       modelCache.current.set(model, data); apply(data);
     } catch (err) {
       if (version === requestVersion.current) { setMatches([]); setPageError(err.message || 'Unable to load matching results.'); }
@@ -115,22 +115,10 @@ export default function SmartMatching() {
 
   const formatPct = (score) => `${Math.round(score * 100)}%`;
 
-  const getScoreColor = (score) => {
-    if (score >= 0.7) return 'text-green-600 dark:text-green-400';
-    if (score >= 0.5) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
-  };
-
   const getScoreBg = (score) => {
     if (score >= 0.7) return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
     if (score >= 0.5) return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
     return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
-  };
-
-  const getBarColor = (score) => {
-    if (score >= 0.7) return 'bg-green-500';
-    if (score >= 0.5) return 'bg-yellow-500';
-    return 'bg-red-500';
   };
 
   const getStatusDot = (score) => {
@@ -156,19 +144,29 @@ export default function SmartMatching() {
           </select>
         </div></>} />
       <AlgorithmComparison model={selectedModel} onModelChange={selectModel} />
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <p className="text-xs text-gray-500 dark:text-gray-400">Each report can produce five suggestions using the selected matching type. Review the reports before verifying ownership.</p>
+        <button type="button" className="ui-button shrink-0" disabled={loading}
+          onClick={() => { void loadMatches({ force: true }); }}>
+          {loading ? 'Calculating...' : 'Recalculate matches'}
+        </button>
+      </div>
       {coverage?.skipped > 0 && <p className="ui-panel p-3 mb-4 text-sm" role="status">{coverage.skipped} report(s) have no usable {['clip', 'resnet50', 'efficientnet-b0'].includes(selectedModel) ? 'photo' : 'description'} and were excluded from this model's results.</p>}
       {/* Adjustable Percentage Slider */}
       <div className="ui-panel p-5 mb-6">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Match Threshold</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Similarity threshold</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Only show matches above <strong>{minScore}%</strong> similarity
+              Show suggested pairs at or above <strong>{minScore}%</strong> similarity
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Similarity is not accuracy or ownership confidence. Scores differ between models.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 py-1.5 rounded-full text-sm font-bold">
-              {filteredMatches.length} match{filteredMatches.length === 1 ? '' : 'es'}
+              {filteredMatches.length} suggested pair{filteredMatches.length === 1 ? '' : 's'}
             </span>
           </div>
         </div>
@@ -232,7 +230,7 @@ export default function SmartMatching() {
                 {/* Score badge + ID */}
                 <div className="flex items-center justify-between mb-3">
                   <span className={`px-3 py-1 rounded-full text-xs font-bold ${getScoreBg(match.score)}`}>
-                    {getStatusDot(match.score)} {formatPct(match.score)} Match
+                    {getStatusDot(match.score)} {formatPct(match.score)} {match.matching_mode === 'text' ? 'text' : 'image'} similarity
                   </span>
 
                 </div>
@@ -261,81 +259,31 @@ export default function SmartMatching() {
                   </div>
                 </div>
 
-                {/* Ranking score for the selected modality */}
-                <div className="mb-2">
+                <div className="mb-3">
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500">Ranking score</span>
-                    <span className={`font-bold ${getScoreColor(match.score)}`}>
-                      {formatPct(match.score)}
+                    <span className="text-gray-500 dark:text-gray-400">
+                      <AppIcon name={match.matching_mode === 'text' ? 'document' : 'image'} /> {match.matching_mode === 'text' ? 'Text similarity' : 'Image similarity'}
                     </span>
+                    <span className="font-bold">{formatPct(match.score)}</span>
                   </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    role="meter"
+                    aria-label={match.matching_mode === 'text' ? 'Text similarity' : 'Image similarity'}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.max(0, Math.min(100, Math.round(match.score * 100)))}
+                    className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5"
+                  >
                     <div
-                      className={`rounded-full h-2 transition-all ${getBarColor(match.score)}`}
-                      style={{ width: `${Math.min(100, match.score * 100)}%` }}
+                      className={`rounded-full h-1.5 transition-all ${match.score >= 0.7 ? 'bg-green-500' : match.score >= 0.5 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                      style={{ width: `${Math.max(0, Math.min(100, match.score * 100))}%` }}
                     />
                   </div>
                 </div>
-
-                {/* Image Similarity */}
-                {match.matching_mode !== 'text' && <div className="mb-2">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500"><AppIcon name="image" /> Image</span>
-                    <span className={`font-bold ${getScoreColor(match.image_score)}`}>
-                      {formatPct(match.image_score)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                    <div
-                      className={`rounded-full h-1.5 transition-all ${getBarColor(match.image_score)}`}
-                      style={{ width: `${Math.min(100, match.image_score * 100)}%` }}
-                    />
-                  </div>
-                </div>}
-
-                {/* Text Similarity */}
-                {match.matching_mode !== 'image' && <div className="mb-3">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500"><AppIcon name="document" /> Text</span>
-                    <span className={`font-bold ${getScoreColor(match.text_score)}`}>
-                      {formatPct(match.text_score)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                    <div
-                      className={`rounded-full h-1.5 transition-all ${getBarColor(match.text_score)}`}
-                      style={{ width: `${Math.min(100, match.text_score * 100)}%` }}
-                    />
-                  </div>
-                </div>}
 
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
                   {match.model_name || (match.matching_mode === 'text' ? 'E5-base-v2' : 'CLIP ViT-B/32')}
                 </p>
-
-                {/* Item images side by side */}
-                <div className="flex gap-2 mb-3">
-                  {match.lost_item?.image && (
-                    <div className="flex-1">
-                      <p className="text-xs text-gray-400 mb-1">Lost photo</p>
-                      <img
-                        src={match.lost_item.image}
-                        alt="Lost"
-                        className="w-full h-28 rounded-lg object-contain border border-gray-200 dark:border-gray-700"
-                      />
-                    </div>
-                  )}
-                  {match.found_item?.image && (
-                    <div className="flex-1">
-                      <p className="text-xs text-gray-400 mb-1">Found photo</p>
-                      <img
-                        src={match.found_item.image}
-                        alt="Found"
-                        className="w-full h-28 rounded-lg object-contain border border-gray-200 dark:border-gray-700"
-                      />
-                    </div>
-                  )}
-                </div>
 
                 {/* Actions */}
                 <div className="flex gap-2">
@@ -407,7 +355,7 @@ export default function SmartMatching() {
 
           {filteredMatches.length === 0 && (
             <div className="text-center py-12 text-gray-500 dark:text-gray-400 ui-empty">
-              <p className="text-lg mb-1">No matches above {minScore}%</p>
+              <p className="text-lg mb-1">No suggested pairs at or above {minScore}% similarity</p>
               <p className="text-sm">Lower the threshold slider to see more results</p>
             </div>
           )}

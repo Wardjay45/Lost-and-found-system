@@ -46,6 +46,9 @@ credentials.json
 
 .tooling/
 
+# Local reusable model features (never report photos or credentials)
+server/.cache/
+
 .expo-export-check/
 
 .vercel

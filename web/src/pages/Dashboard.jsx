@@ -25,7 +25,16 @@ export default function Dashboard() {
     {label:'Lost items',data:[stats.lostActive||0,stats.lostPotentialMatch||0,stats.lostClaimed||0],backgroundColor:'#6b63df',borderRadius:4,maxBarThickness:26},
     {label:'Found items',data:[stats.foundActive||0,stats.foundPotentialMatch||0,stats.foundClaimed||0],backgroundColor:'#a8b9dd',borderRadius:4,maxBarThickness:26},
   ]};
-  const chartOptions = { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{usePointStyle:true,pointStyle:'rectRounded',padding:24,boxWidth:7,color:dark?'#a2afc8':'#64718b',font:{size:11}}}},scales:{x:{grid:{display:false},border:{display:false},ticks:{color:dark?'#a2afc8':'#64718b',font:{size:11}}},y:{beginAtZero:true,grid:{color:dark?'#2c3750':'#eef0f6'},border:{display:false},ticks:{precision:0,color:dark?'#a2afc8':'#64718b',font:{size:11}}}} };
+  const chartText = settings.highContrast ? (dark ? '#ffffff' : '#111827') : dark ? '#c2cee0' : '#405269';
+  const chartFont = { size: settings.textSize === 'xlarge' ? 16 : settings.textSize === 'large' ? 15 : 13 };
+  const chartOptions = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 24, boxWidth: 7, color: chartText, font: chartFont } } },
+    scales: {
+      x: { grid: { display: false }, border: { display: false }, ticks: { color: chartText, font: chartFont } },
+      y: { beginAtZero: true, grid: { color: dark ? '#2c3750' : '#eef0f6' }, border: { display: false }, ticks: { precision: 0, color: chartText, font: chartFont } },
+    },
+  };
   return <div className="page page-dashboard"><PageHeader title="Overview" description={`Welcome back, ${user?.name?.split(' ')[0] || 'Admin'}. Here's your campus at a glance.`} />
     {error ? <ErrorState message={error} onRetry={load} /> : loading ? <LoadingState label="Loading campus overview..." /> : <>
       <div className="metric-grid"><StatCard title="Lost items" value={stats.totalLostItems||0} icon="search" onClick={() => navigate('/items/lost')} /><StatCard title="Found items" value={stats.totalFoundItems||0} icon="box" onClick={() => navigate('/items/found')} /><StatCard title="Verified recoveries" value={verifiedRecoveries} icon="success" color="green" subtitle={`${stats.totalPotentialMatches ?? stats.lostPotentialMatch ?? 0} potential matches awaiting verification`} /><StatCard title="Pending approval" value={(stats.lostPending||0)+(stats.foundPending||0)} icon="clock" color="yellow" onClick={() => navigate('/items/lost')} /></div>

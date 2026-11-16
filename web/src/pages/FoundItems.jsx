@@ -1,4 +1,4 @@
-import ReportReadState from '../components/common/ReportReadState';
+import ReportItemSummary from '../components/common/ReportItemSummary';
 import useMarkVisibleRead from '../hooks/useMarkVisibleRead';
 import useNotifications from '../hooks/useNotifications';
 import useLiveRefresh from '../hooks/useLiveRefresh';
@@ -228,8 +228,9 @@ export default function FoundItems() {
       </div>
 
       <DataRegion loading={pageLoading} error={pageError} onRetry={() => window.location.reload()} empty={filtered.length === 0}><div className="ui-panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="ui-table responsive-table w-full">
+        <div className="overflow-x-auto report-table-scroll" role="region" aria-label="Found item reports" tabIndex={0}>
+          <table className="ui-table responsive-table report-table w-full">
+            <colgroup><col className="report-col-item" /><col className="report-col-category" /><col className="report-col-date" /><col className="report-col-location" /><col className="report-col-person" /><col className="report-col-status" /><col className="report-col-actions" /></colgroup>
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Item / Description</th>
@@ -246,17 +247,11 @@ export default function FoundItems() {
               {filtered.map((item) => (
                 <tr key={item.id} className="report-row" data-read-state={isUnread('found', item.id) ? 'unread' : 'viewed'}>
                   <td data-label="Item" className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <ItemPhoto item={item} kind="found" />
-                      <div>
-                        <p className="report-item-title text-sm text-gray-900 dark:text-white whitespace-pre-wrap break-words">{item.description || 'No description provided.'}</p>
-                        <div className="report-item-meta"><ReportReadState unread={isUnread('found', item.id)} /></div>
-                      </div>
-                    </div>
+                    <ReportItemSummary item={item} kind="found" unread={isUnread('found', item.id)} />
                   </td>
                   <td data-label="Category" className="px-4 py-3"><span className="text-sm text-gray-600 dark:text-gray-400">{item.category_name || item.categoryName}</span></td>
 
-                  <td data-label="Reported" className="px-4 py-3"><span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatDateTime(item.date_found || item.dateFound)}</span></td>
+                  <td data-label="Reported" className="px-4 py-3"><span className="text-sm text-gray-600 dark:text-gray-400">{formatDateTime(item.date_found || item.dateFound)}</span></td>
                   <td data-label="Location" className="px-4 py-3"><span className="text-sm text-gray-600 dark:text-gray-400">{item.location_found || item.locationFound}</span></td>
                   <td data-label="Condition" className="px-4 py-3"><StatusBadge status={item.condition || 'Good'} /></td>
                   <td data-label="Status" className="px-4 py-3"><StatusBadge status={item.status} /></td>
@@ -321,7 +316,7 @@ export default function FoundItems() {
         </form>
       </Modal>
 
-      {editingItem && <EditReportModal key={editingItem.id} item={editingItem} kind="found" categories={categories} onClose={() => { setSelectedItem(editingItem); setEditingItem(null); }} onSaved={updated => { setItems(previous => previous.map(item => String(item.id) === String(updated.id) ? updated : item)); setSelectedItem(updated); setEditingItem(null); setFormSuccess('Report details updated successfully.'); }} />}
+      {editingItem && <EditReportModal key={editingItem.id} item={editingItem} kind="found" categories={categories} onClose={() => { setSelectedItem(editingItem); setEditingItem(null); }} onSaved={updated => { setItems(previous => previous.map(item => String(item.id) === String(updated.id) ? updated : item)); setSelectedItem(updated); setEditingItem(null); }} />}
       <Modal isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} title="Found item details" size="xl">
         {selectedItem && (
           <div className="space-y-4">

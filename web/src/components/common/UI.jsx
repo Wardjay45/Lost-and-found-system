@@ -15,8 +15,8 @@ export function LoadingState({ label = 'Loading your workspace...' }) {
 export function ErrorState({ message = 'Something went wrong. Please try again.', onRetry }) {
   return <div className="ui-alert ui-alert-error" role="alert"><AppIcon name="warning" /><div><strong>Unable to load this section</strong><p>{message}</p></div>{onRetry && <button type="button" className="ui-button ui-button-secondary" onClick={onRetry}><AppIcon name="refresh" />Try again</button>}</div>;
 }
-export function DataRegion({ loading, error, empty, emptyTitle = 'No results found', emptyDescription = 'Try adjusting your search or filters.', onRetry, children }) {
-  if (loading) return <LoadingState />;
+export function DataRegion({ loading, loadingFallback, error, empty, emptyTitle = 'No results found', emptyDescription = 'Try adjusting your search or filters.', onRetry, children }) {
+  if (loading) return loadingFallback ?? <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={onRetry} />;
   if (empty) return <EmptyState icon="search" title={emptyTitle} description={emptyDescription} />;
   return children;

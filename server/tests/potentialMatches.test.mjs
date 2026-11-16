@@ -31,6 +31,32 @@ function fixture() {
 }
 const entry = (lost = 11, found = 22) => ({ id: 1, action: 'match', timestamp: '2026-10-29', details: { lost_item_id: String(lost), found_item_id: String(found), score: .86 } });
 
+test('saved potential matches reopen with their original matching type and model from either report', async t => {
+  for (const [mode, model] of [['image', 'ResNet50'], ['text', 'E5-base-v2']]) {
+    const f = fixture(), secret = 'isolated-matching-type-test';
+    const app = express(); app.use(express.json()); app.use('/', createActivityLogsRouter({ client: f.client, jwtSecret: secret }));
+    const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
+    t.after(() => { server.closeAllConnections(); server.close(); });
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt.sign({ id: 7, role: 'admin' }, secret) };
+    const details = { lost_item_id: 11, found_item_id: 22, score: 0, image_score: 0, text_score: 0, matching_mode: mode, model_name: model };
+    const save = await fetch(base, { method: 'POST', headers, body: JSON.stringify({ action: 'match', mark_potential: true, details: JSON.stringify(details) }) });
+    assert.equal(save.status, 201);
+    for (const path of ['/match/lost_items/11', '/match/found_items/22']) {
+      const response = await fetch(base + path, { headers });
+      assert.equal(response.status, 200);
+      const { match } = await response.json();
+      assert.equal(match.matching_mode, mode);
+      assert.equal(match.model_name, model);
+      assert.equal(match[`${mode}_score`], 0);
+    }
+    for (const invalid of [{ matching_mode: 'combined' }, { model_name: {} }]) {
+      const response = await fetch(base, { method: 'POST', headers, body: JSON.stringify({ action: 'match', mark_potential: true, details: JSON.stringify({ ...details, ...invalid }) }) });
+      assert.equal(response.status, 400);
+    }
+  }
+});
+
 test('saved lookup reads correct-side object/string logs and legacy matches, never nearby timestamps', async () => {
   const f = fixture(); f.rows.activity_logs.push(entry());
   assert.equal((await loadSavedPotentialMatch(f.client, '11', 'lost_items')).found_item.id, 22);

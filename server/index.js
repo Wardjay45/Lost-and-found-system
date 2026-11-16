@@ -1,4 +1,5 @@
 import { aiFetch } from './services/aiClient.js';
+import { warmReportModelFeatures } from './services/reportModelMatching.js';
 import app from './app.js';
 import supabase from './db.js';
 import os from 'os';
@@ -13,7 +14,7 @@ const AI_URL = process.env.AI_SERVER_URL || 'http://localhost:8000';
 const generateEmbeddingsForItem = async (item, table, imageUrl) => {
   try {
     const updates = {};
-    if (item.description) {
+    if (item.description && !item.text_embedding?.length) {
       try {
         const r = await aiFetch(`${AI_URL}/embedding/text`, {
           method: 'POST',
@@ -26,7 +27,7 @@ const generateEmbeddingsForItem = async (item, table, imageUrl) => {
         }
       } catch {}
     }
-    if (imageUrl) {
+    if (imageUrl && !item.image_embedding?.length) {
       try {
         let imageBase64 = imageUrl;
         if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
@@ -57,6 +58,7 @@ const generateEmbeddingsForItem = async (item, table, imageUrl) => {
       await supabase.from(table).update(updates).eq('id', item.id);
       console.log(`  ✅ Auto-embedded ${table}#${item.id}: ${Object.keys(updates).join(', ')}`);
     }
+    await warmReportModelFeatures({ ...item, ...updates }, table === 'lost_items' ? 'lost' : 'found');
   } catch (e) {
     console.log(`  ⚠ Auto-embed failed for ${table}#${item.id}: ${e.message}`);
   }
@@ -67,7 +69,7 @@ const pollForUnembedded = async () => {
     try {
       const { data: items } = await supabase
         .from(table)
-        .select('id, description, image')
+        .select('id, description, image, last_updated, text_embedding, image_embedding')
         .or('image_embedding.is.null,text_embedding.is.null')
         .limit(5);
       for (const item of (items || [])) {

@@ -10,6 +10,8 @@ export async function recordPotentialMatch(match, { activityLogsApi }) {
   const saved = await activityLogsApi.create({ action: 'match', mark_potential: true, details: JSON.stringify({
     lost_item_id: match.lost_item.id, found_item_id: match.found_item.id,
     ...scores,
+    ...(['image', 'text'].includes(match.matching_mode) ? { matching_mode: match.matching_mode } : {}),
+    ...(typeof match.model_name === 'string' && match.model_name.trim() ? { model_name: match.model_name.trim() } : {}),
   }) });
   if (typeof window !== 'undefined') { notifyChange('lost_items'); notifyChange('found_items'); }
   return saved;
