@@ -16,7 +16,8 @@ test('actual activity client omits undefined filters and sends the signed-in ses
   globalThis.fetch = async (url, options) => { requests.push({ url, ...options }); return { ok: true, json: async () => [] }; };
   try {
     const sourceUrl = new URL('../src/services/api.js', import.meta.url);
-    const source = readFileSync(sourceUrl, 'utf8').replace('import.meta.env.VITE_API_URL', 'undefined').replace("'../../../shared/activityLogs.mjs'", JSON.stringify(new URL('../../shared/activityLogs.mjs', import.meta.url).href)).replace("'./liveNotifications.mjs'", JSON.stringify(new URL('../src/services/liveNotifications.mjs', import.meta.url).href));
+    const source = readFileSync(sourceUrl, 'utf8').replace('import.meta.env.VITE_API_URL', 'undefined')
+      .replace(/from '(\.[^']+)'/g, (_, specifier) => `from ${JSON.stringify(new URL(specifier, sourceUrl).href)}`);
     const { activityLogsApi } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     await activityLogsApi.getAll({ action: undefined });
     await activityLogsApi.create({ action: 'match', details: '{}' });

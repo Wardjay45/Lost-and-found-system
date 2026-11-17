@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { aiFetch } from './aiClient.js';
+import { aiFetch, readAiJson } from './aiClient.js';
 import { reportFeatureStore } from './reportFeatureStore.js';
 
 export const REPORT_MODELS = {
@@ -15,6 +15,24 @@ const cache = new Map();
 const inFlightByCache = new WeakMap();
 const MAX_CACHE = 1024;
 const TTL = 5 * 60 * 1000;
+// Leave headroom below Vercel's 4.5 MB limit, including JSON and UTF-8 bytes.
+const MAX_REQUEST_BYTES = 4200000;
+
+function* embeddingBatches(rows, model) {
+  const envelopeBytes = Buffer.byteLength(JSON.stringify({ model, items: [] }));
+  let batch = [], bytes = envelopeBytes;
+  for (const row of rows) {
+    const itemBytes = Buffer.byteLength(JSON.stringify(row.input));
+    if (envelopeBytes + itemBytes > MAX_REQUEST_BYTES) throw new Error('A report photo exceeds the matching request size limit.');
+    if (batch.length && (batch.length === 8 || bytes + 1 + itemBytes > MAX_REQUEST_BYTES)) {
+      yield batch;
+      batch = []; bytes = envelopeBytes;
+    }
+    bytes += itemBytes + (batch.length ? 1 : 0);
+    batch.push(row);
+  }
+  if (batch.length) yield batch;
+}
 
 async function reportPhoto(value, fetchPhoto) {
   if (value.startsWith('data:image/')) {
@@ -112,14 +130,12 @@ export async function matchReportsWithModel(lostItems, foundItems, model, {
     }
   }
   try {
-    for (let start = 0; start < owned.length; start += 8) {
-      const batch = owned.slice(start, start + 8);
+    for (const batch of embeddingBatches(owned, model)) {
       const response = await fetchAi(`${process.env.AI_SERVER_URL || 'http://localhost:8000'}/comparison/embeddings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, items: batch.map(row => row.input) }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `${spec.name} could not process these reports.`);
+      const data = await readAiJson(response);
       if (data.model !== model || !Array.isArray(data.items) || data.items.length !== batch.length || new Set(data.items.map(row => row.id)).size !== batch.length) throw new Error('The AI service returned incomplete report features.');
       for (const row of batch) {
         row.vector = normalize(data.items.find(result => result.id === row.id)?.embedding);

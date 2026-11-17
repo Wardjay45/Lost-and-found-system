@@ -4,6 +4,7 @@ import StatusBadge from './StatusBadge';
 import Modal from './Modal';
 import ItemDescription from './ItemDescription';
 import { formatDateTime } from '../../utils/formatters';
+import useReportPhoto from '../../hooks/useReportPhoto';
 
 function scorePercent(value) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value * 100))) : null;
@@ -12,14 +13,15 @@ function scorePercent(value) {
 function ReportCard({ item, kind, onPreview }) {
   const [failedImage, setFailedImage] = useState(null);
   const lost = kind === 'lost';
-  const photo = item?.image && item.image !== failedImage;
+  const { source, loading, hasPhoto } = useReportPhoto(item);
+  const photo = source && source !== failedImage;
   return <article className={`match-report match-report-${kind}`} aria-label={lost ? 'Lost item report' : 'Found item report'}>
     <header className="match-report-header"><span><AppIcon name={lost ? 'search' : 'box'} />{lost ? 'Lost item' : 'Found item'}</span>{item?.status && <StatusBadge status={item.status} />}</header>
     <div className="match-photo">
-      {photo ? <button type="button" onClick={() => onPreview({ src: item.image, label: `${lost ? 'Lost' : 'Found'} item photo` })} aria-label={`Enlarge ${kind} item photo`}>
-        <img src={item.image} alt={`${lost ? 'Lost' : 'Found'} item: ${item.description || 'Reported item'}`} onError={() => setFailedImage(item.image)} />
+      {photo ? <button type="button" onClick={() => onPreview({ src: source, label: `${lost ? 'Lost' : 'Found'} item photo` })} aria-label={`Enlarge ${kind} item photo`}>
+        <img src={source} alt={`${lost ? 'Lost' : 'Found'} item: ${item.description || 'Reported item'}`} onError={() => setFailedImage(source)} />
         <span className="match-photo-action"><AppIcon name="image" />Enlarge photo</span>
-      </button> : <div className="match-photo-empty"><AppIcon name="image" /><span>{item?.image ? 'Photo unavailable' : 'No photo provided'}</span></div>}
+      </button> : <div className="match-photo-empty"><AppIcon name="image" /><span>{loading ? 'Loading photo…' : hasPhoto ? 'Photo unavailable' : 'No photo provided'}</span></div>}
     </div>
     <div className="match-report-body">
       <ItemDescription description={item?.description} />

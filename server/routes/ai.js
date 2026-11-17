@@ -8,6 +8,27 @@ import supabase from '../db.js';
 const router = Router();
 router.use('/comparison', createComparisonRouter());
 
+// Kept behind the same administrator middleware as matching. Send one photo
+// per request instead of repeating base64 bytes in every suggested pair.
+router.get('/report-photo/:kind/:id', async (req, res) => {
+  const { kind, id } = req.params;
+  if (!['lost', 'found'].includes(kind) || !/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) {
+    return res.status(400).json({ error: 'Select a valid report photo.' });
+  }
+  res.set('Cache-Control', 'private, no-store');
+  try {
+    const { data, error } = await supabase.from(kind === 'lost' ? 'lost_items' : 'found_items').select('image').eq('id', Number(id)).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Report photo not found.' });
+    if (typeof data.image === 'string' && Buffer.byteLength(data.image) > 4200000) {
+      return res.status(413).json({ error: 'This report photo is too large to display.' });
+    }
+    return res.json({ image: data.image || null });
+  } catch {
+    return res.status(503).json({ error: 'Unable to load this report photo. Please try again.' });
+  }
+});
+
 const AI_URL = process.env.AI_SERVER_URL || 'http://localhost:8000';
 
 // Convert a public image URL to a base64 data URI
@@ -123,6 +144,7 @@ router.post('/auto-match', async (req, res) => {
     const selectedModel = req.body?.model;
     if (selectedModel != null && !Object.hasOwn(REPORT_MODELS, selectedModel)) return res.status(400).json({ error: 'Select a supported matching model.' });
     if (req.body?.refresh !== undefined && typeof req.body.refresh !== 'boolean') return res.status(400).json({ error: 'Refresh must be true or false.' });
+    if (req.body?.compact !== undefined && typeof req.body.compact !== 'boolean') return res.status(400).json({ error: 'Compact must be true or false.' });
     // Matching rules:
     // - Lost items: only 'active' (pending = not yet approved, potential_match/matched/claimed = already matched)
     // - Found items: only 'active' (potential_match/matched/claimed = already matched)
@@ -148,7 +170,10 @@ router.post('/auto-match', async (req, res) => {
       const result = await matchReportsWithModel(lostItems, foundItems, selectedModel, { refresh: req.body?.refresh === true });
       const report = (item, kind) => ({ id: item.id, item_id: item.item_id, description: item.description,
         category_name: item.category_name, location: kind === 'lost' ? item.location_lost : item.location_found || item.location_lost,
-        location_details: item.location_details, last_updated: item.last_updated, image: item.image_url || item.image,
+        location_details: item.location_details, last_updated: item.last_updated,
+        ...(req.body?.compact && item.image?.startsWith('data:') && !item.image_url
+          ? { image: null, image_endpoint: `/ai/report-photo/${kind}/${item.id}?v=${encodeURIComponent(item.last_updated || '')}` }
+          : { image: item.image_url || item.image }),
         status: item.status, reporter_name: item.reporter_name || item.finder_name, reporter_id: item.reporter_id,
         finder_name: item.finder_name, date_reported: item.date_reported, date_found: item.date_found, condition: item.condition });
       return res.json({ matches: result.pairs.map(pair => ({ id: `match-${pair.lost.id}-${pair.found.id}`,
@@ -261,7 +286,7 @@ router.post('/auto-match', async (req, res) => {
     });
   } catch (err) {
     console.error('Auto-match error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
   }
 });
 

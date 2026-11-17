@@ -10,7 +10,7 @@ import AlgorithmComparison from '../components/common/AlgorithmComparison';
 import HandoverPhotoInput from '../components/common/HandoverPhotoInput';
 import { normalizeKnowledgeAnswers } from '../../../shared/claimVerification.mjs';
 import ItemDescription from '../components/common/ItemDescription';
-import { categoriesApi, activityLogsApi } from '../services/api';
+import request, { categoriesApi, activityLogsApi } from '../services/api';
 import { recordPotentialMatch } from '../services/recordPotentialMatch.mjs';
 import { showToast } from '../components/common/Toast';
 import { formatDateTime } from '../utils/formatters';
@@ -61,11 +61,9 @@ export default function SmartMatching() {
       let pending = modelRequests.current.get(model);
       if (!pending) {
         pending = (async () => {
-          const res = await authenticatedFetch(`${API_URL}/ai/auto-match`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }),
+          const data = await request('/ai/auto-match', {
+            method: 'POST', body: JSON.stringify({ model, compact: true }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Unable to load model matches. Please try again.');
           if (!Array.isArray(data.matches)) throw new Error('Matching returned an invalid response.');
           if (data.model !== model) throw new Error('The API server is running an older matching version. Restart the backend API, then refresh this page.');
           return data;

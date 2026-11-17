@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aiFetch } from '../services/aiClient.js';
+import { aiFetch, readAiJson } from '../services/aiClient.js';
 
 test('AI key stays on the configured server origin and preserves request data', async () => {
   const previous = { url: process.env.AI_SERVER_URL, key: process.env.AI_SERVICE_KEY, fetch: globalThis.fetch };
@@ -14,4 +14,11 @@ test('AI key stays on the configured server origin and preserves request data', 
     globalThis.fetch = previous.fetch;
     for (const [key, value] of [['AI_SERVER_URL', previous.url], ['AI_SERVICE_KEY', previous.key]]) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
+});
+
+test('AI response reader handles platform text, upstream JSON and invalid successful bodies', async () => {
+  await assert.rejects(() => readAiJson(new Response('upstream unavailable', { status: 503 })), /HTTP 503/);
+  await assert.rejects(() => readAiJson(new Response('{"detail":"Model unavailable"}', { status: 503 })), /Model unavailable/);
+  await assert.rejects(() => readAiJson(new Response('<html>gateway</html>')), /invalid response/);
+  assert.deepEqual(await readAiJson(new Response('{"items":[]}')), { items: [] });
 });

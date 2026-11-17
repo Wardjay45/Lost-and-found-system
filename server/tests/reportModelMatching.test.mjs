@@ -147,3 +147,37 @@ test('overlapping preparation shares inference and failed requests can retry', a
     if (!fail) assert.ok(results.every(result => result.value.pairs[0].score === 1));
   }
 });
+
+test('large report photos are split by serialized bytes and every report is still ranked', async () => {
+  const image = 'data:image/jpeg;base64,' + 'A'.repeat(1192300);
+  const lost = Array.from({ length: 8 }, (_, id) => ({ id: 4000 + id, image, last_updated: String(id) }));
+  const found = [{ id: 5000, image: image + 'AA' }];
+  const requests = [];
+  const result = await matchReportsWithModel(lost, found, 'clip', {
+    featureCache: new Map(),
+    fetchAi: async (_url, options) => {
+      assert.ok(Buffer.byteLength(options.body) < 4200000);
+      const body = JSON.parse(options.body); requests.push(body);
+      return new Response(JSON.stringify({ model: body.model, items: body.items.map(row => ({ id: row.id, embedding: [1, 0] })) }));
+    },
+  });
+  assert.ok(requests.length > 1);
+  assert.equal(requests.flatMap(body => body.items).length, 9);
+  assert.equal(result.query_count, 8);
+  assert.equal(result.candidate_count, 1);
+  assert.equal(result.pairs.length, 8);
+});
+
+test('plain-text hosting failures produce actionable errors and release pending features for retry', async () => {
+  const lost = [{ id: 6001, description: 'hosting failure diagnostic' }];
+  const options = { featureCache: new Map(), fetchAi: async () => new Response('Request Entity Too Large', { status: 413 }) };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await assert.rejects(() => matchReportsWithModel(lost, [], 'minilm', options), error => {
+      assert.equal(error.code, 'AI_PAYLOAD_TOO_LARGE');
+      assert.equal(error.status, 502);
+      assert.match(error.message, /photo data/);
+      assert.doesNotMatch(error.message, /Unexpected token/);
+      return true;
+    });
+  }
+});

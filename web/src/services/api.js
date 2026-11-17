@@ -1,5 +1,6 @@
 import { notifyChange } from './liveNotifications.mjs';
 import { activityLogQuery } from '../../../shared/activityLogs.mjs';
+import { readJsonResponse } from './jsonResponse.mjs';
 const mutationTables = {
   'lost-items': 'lost_items', 'found-items': 'found_items', messages: 'messages',
   categories: 'categories', users: 'users', 'qr-locations': 'qr_locations',
@@ -23,17 +24,7 @@ const request = async (endpoint, options = {}) => {
     headers,
   });
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    const message = error.error || (res.status === 404
-      ? 'This API endpoint is unavailable. Restart the API server to load the latest changes.'
-      : `Request failed (HTTP ${res.status}). Please try again.`);
-    const failure = new Error(message);
-    failure.code = error.code;
-    throw failure;
-  }
-
-  const data = await res.json();
+  const data = await readJsonResponse(res);
   const warning = res.headers?.get('X-Activity-Warning');
   if (warning && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('lf-admin-warning', { detail: warning }));
   if (options.method && options.method !== 'GET') {
