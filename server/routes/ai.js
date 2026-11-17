@@ -3,6 +3,7 @@ import { aiFetch } from '../services/aiClient.js';
 import { Router } from 'express';
 import { createComparisonRouter } from '../services/comparisonRouter.js';
 import { matchReportsWithModel, REPORT_MODELS } from '../services/reportModelMatching.js';
+import { readMatchingReports } from '../services/matchingReports.js';
 import supabase from '../db.js';
 
 const router = Router();
@@ -148,13 +149,18 @@ router.post('/auto-match', async (req, res) => {
     // Matching rules:
     // - Lost items: only 'active' (pending = not yet approved, potential_match/matched/claimed = already matched)
     // - Found items: only 'active' (potential_match/matched/claimed = already matched)
-    const [{ data: lostItems, error: lostErr }, { data: foundItems, error: foundErr }] = await Promise.all([
-      supabase.from('lost_items').select('*').eq('status', 'active').limit(500),
-      supabase.from('found_items').select('*').eq('status', 'active').limit(500),
-    ]);
-
-    if (lostErr) throw lostErr;
-    if (foundErr) throw foundErr;
+    let lostItems, foundItems;
+    if (selectedModel && req.body?.compact === true) {
+      ({ lostItems, foundItems } = await readMatchingReports(supabase, selectedModel, { refresh: req.body?.refresh === true }));
+    } else {
+      const [lost, found] = await Promise.all([
+        supabase.from('lost_items').select('*').eq('status', 'active').limit(500),
+        supabase.from('found_items').select('*').eq('status', 'active').limit(500),
+      ]);
+      if (lost.error) throw lost.error;
+      if (found.error) throw found.error;
+      lostItems = lost.data; foundItems = found.data;
+    }
 
     if (!lostItems?.length || !foundItems?.length) {
       return res.json({
@@ -171,7 +177,7 @@ router.post('/auto-match', async (req, res) => {
       const report = (item, kind) => ({ id: item.id, item_id: item.item_id, description: item.description,
         category_name: item.category_name, location: kind === 'lost' ? item.location_lost : item.location_found || item.location_lost,
         location_details: item.location_details, last_updated: item.last_updated,
-        ...(req.body?.compact && item.image?.startsWith('data:') && !item.image_url
+        ...(req.body?.compact && !item.image_url && !item.image?.startsWith('https://')
           ? { image: null, image_endpoint: `/ai/report-photo/${kind}/${item.id}?v=${encodeURIComponent(item.last_updated || '')}` }
           : { image: item.image_url || item.image }),
         status: item.status, reporter_name: item.reporter_name || item.finder_name, reporter_id: item.reporter_id,

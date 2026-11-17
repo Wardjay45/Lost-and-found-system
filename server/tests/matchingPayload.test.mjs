@@ -14,6 +14,11 @@ test('compact matching keeps large inline photos out of results and serves one p
     const rows = table === 'lost_items' ? lost : found;
     return {
       limit: async () => ({ data: rows, error: null }),
+      order() { return this; },
+      range: async (start, end) => {
+        assert.ok(!columns.split(',').includes('image'));
+        return { data: rows.slice(start, end + 1), error: null };
+      },
       maybeSingle: async () => {
         assert.equal(columns, 'image'); assert.equal(field, 'id');
         return { data: rows.find(row => row.id === value), error: fail ? new Error('Database unavailable') : null };

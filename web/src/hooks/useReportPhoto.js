@@ -14,13 +14,13 @@ export default function useReportPhoto(item) {
     loadPhoto(endpoint).then(source => {
       if (active) setLoaded({ endpoint, source });
     }).catch(() => {
-      if (active) setLoaded({ endpoint, source: '' });
+      if (active) setLoaded({ endpoint, source: '', failed: true });
     });
     return () => { active = false; };
   }, [direct, endpoint]);
   return {
     source: direct || (loaded?.endpoint === endpoint ? loaded?.source : ''),
     loading: !direct && !!endpoint && loaded?.endpoint !== endpoint,
-    hasPhoto: !!(direct || endpoint),
+    hasPhoto: !!direct || (!!endpoint && (loaded?.endpoint !== endpoint || !!loaded?.source || loaded?.failed)),
   };
 }
