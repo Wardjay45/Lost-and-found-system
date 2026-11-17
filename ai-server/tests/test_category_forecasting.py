@@ -15,7 +15,8 @@ class CategoryForecastTests(unittest.TestCase):
             response = client.get('/api/analytics/category-forecast?itemType=lost')
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers['cache-control'], 'no-store')
-            self.assertEqual(response.json()['dataset']['total_records'], 126)
+            self.assertEqual(response.json()['dataset']['total_records'], 516)
+            self.assertEqual(response.json()['dataset']['dataset_kind'], 'synthetic_gap_scenario')
             self.assertEqual(client.get('/api/analytics/category-forecast?itemType=invalid').status_code, 422)
             response = client.post('/api/analytics/category-forecast', json={'historical': [], 'categories': ['Keys'], 'dataset': {'source': 'current'}})
             self.assertEqual(response.status_code, 200)
@@ -25,10 +26,37 @@ class CategoryForecastTests(unittest.TestCase):
         payload = historical_source('lost')
         self.assertEqual(len(payload['categories']), 7)
         self.assertEqual(len(payload['historical']), 29*7)
-        self.assertEqual(sum(row['y'] for row in payload['historical']), 126)
+        self.assertEqual(sum(row['y'] for row in payload['historical']), 516)
         self.assertEqual(payload['dataset']['first_month'], '2024-06-01')
         self.assertEqual(payload['dataset']['last_month'], '2026-10-01')
         self.assertEqual(historical_source('found')['historical'], [])
+
+    def test_historical_scenario_preserves_source_months_and_declares_generated_validation(self):
+        payload = historical_source('lost')
+        dataset = payload['dataset']
+        self.assertEqual(dataset['preserved_original_rows'], 145)
+        self.assertEqual(dataset['original_eligible_records'], 126)
+        self.assertEqual(dataset['synthetic_records'], 390)
+        self.assertEqual(len(dataset['simulated_months']), 19)
+        self.assertEqual(dataset['simulated_months'][0], '2024-11')
+        self.assertEqual(dataset['simulated_months'][-1], '2026-05')
+        source_rows = [r for r in payload['historical'] if r['ds'][:7] in dataset['original_input_months']]
+        synthetic_rows = [r for r in payload['historical'] if r['ds'][:7] in dataset['simulated_months']]
+        self.assertEqual(sum(r['y'] for r in source_rows), 126)
+        self.assertEqual(sum(r['y'] for r in synthetic_rows), 390)
+        self.assertEqual(len(source_rows) + len(synthetic_rows), len(payload['historical']))
+        source_totals = {month: sum(r['y'] for r in source_rows if r['ds'][:7] == month)
+                         for month in dataset['original_input_months']}
+        self.assertEqual(source_totals, {'2024-06': 6, '2024-07': 2, '2024-08': 22,
+                                       '2024-09': 32, '2024-10': 32,
+                                       '2026-06': 2, '2026-07': 3, '2026-08': 2,
+                                       '2026-09': 20, '2026-10': 5})
+        for category in payload['categories']:
+            validation = [r['y'] for r in payload['historical']
+                          if r['category'] == category and '2025-11-01' <= r['ds'] <= '2026-04-01']
+            self.assertEqual(len(validation), 6)
+            self.assertGreater(len(set(validation)), 1)
+        self.assertIn('validation November 2025-April 2026 is simulated', dataset['evaluation_basis'])
 
     def test_selection_uses_only_validation_and_no_target_leakage(self):
         months = pd.date_range('2024-01-01', periods=20, freq='MS')

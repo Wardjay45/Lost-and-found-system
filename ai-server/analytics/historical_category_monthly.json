@@ -29,7 +29,7 @@
       {
         "category": "Bag/Pack/Case",
         "ds": "2024-11-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Bag/Pack/Case",
@@ -39,7 +39,7 @@
       {
         "category": "Bag/Pack/Case",
         "ds": "2025-01-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Bag/Pack/Case",
@@ -54,12 +54,12 @@
       {
         "category": "Bag/Pack/Case",
         "ds": "2025-04-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Bag/Pack/Case",
         "ds": "2025-05-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Bag/Pack/Case",
@@ -69,7 +69,7 @@
       {
         "category": "Bag/Pack/Case",
         "ds": "2025-07-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Bag/Pack/Case",
@@ -79,7 +79,7 @@
       {
         "category": "Bag/Pack/Case",
         "ds": "2025-09-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Bag/Pack/Case",
@@ -89,12 +89,12 @@
       {
         "category": "Bag/Pack/Case",
         "ds": "2025-11-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Bag/Pack/Case",
         "ds": "2025-12-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Bag/Pack/Case",
@@ -114,12 +114,12 @@
       {
         "category": "Bag/Pack/Case",
         "ds": "2026-04-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Bag/Pack/Case",
         "ds": "2026-05-01",
-        "y": 0
+        "y": 4
       },
       {
         "category": "Bag/Pack/Case",
@@ -174,97 +174,97 @@
       {
         "category": "Electronics",
         "ds": "2024-11-01",
-        "y": 0
+        "y": 10
       },
       {
         "category": "Electronics",
         "ds": "2024-12-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Electronics",
         "ds": "2025-01-01",
-        "y": 0
+        "y": 8
       },
       {
         "category": "Electronics",
         "ds": "2025-02-01",
-        "y": 0
+        "y": 6
       },
       {
         "category": "Electronics",
         "ds": "2025-03-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Electronics",
         "ds": "2025-04-01",
-        "y": 0
+        "y": 12
       },
       {
         "category": "Electronics",
         "ds": "2025-05-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Electronics",
         "ds": "2025-06-01",
-        "y": 0
+        "y": 12
       },
       {
         "category": "Electronics",
         "ds": "2025-07-01",
-        "y": 0
+        "y": 10
       },
       {
         "category": "Electronics",
         "ds": "2025-08-01",
-        "y": 0
+        "y": 6
       },
       {
         "category": "Electronics",
         "ds": "2025-09-01",
-        "y": 0
+        "y": 4
       },
       {
         "category": "Electronics",
         "ds": "2025-10-01",
-        "y": 0
+        "y": 15
       },
       {
         "category": "Electronics",
         "ds": "2025-11-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Electronics",
         "ds": "2025-12-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Electronics",
         "ds": "2026-01-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Electronics",
         "ds": "2026-02-01",
-        "y": 0
+        "y": 7
       },
       {
         "category": "Electronics",
         "ds": "2026-03-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Electronics",
         "ds": "2026-04-01",
-        "y": 0
+        "y": 8
       },
       {
         "category": "Electronics",
         "ds": "2026-05-01",
-        "y": 0
+        "y": 10
       },
       {
         "category": "Electronics",
@@ -319,17 +319,17 @@
       {
         "category": "Jewelry",
         "ds": "2024-11-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Jewelry",
         "ds": "2024-12-01",
-        "y": 0
+        "y": 7
       },
       {
         "category": "Jewelry",
         "ds": "2025-01-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Jewelry",
@@ -339,17 +339,17 @@
       {
         "category": "Jewelry",
         "ds": "2025-03-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Jewelry",
         "ds": "2025-04-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Jewelry",
         "ds": "2025-05-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Jewelry",
@@ -359,22 +359,22 @@
       {
         "category": "Jewelry",
         "ds": "2025-07-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Jewelry",
         "ds": "2025-08-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Jewelry",
         "ds": "2025-09-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Jewelry",
         "ds": "2025-10-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Jewelry",
@@ -384,12 +384,12 @@
       {
         "category": "Jewelry",
         "ds": "2025-12-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Jewelry",
         "ds": "2026-01-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Jewelry",
@@ -399,17 +399,17 @@
       {
         "category": "Jewelry",
         "ds": "2026-03-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Jewelry",
         "ds": "2026-04-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Jewelry",
         "ds": "2026-05-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Jewelry",
@@ -464,97 +464,97 @@
       {
         "category": "Keys",
         "ds": "2024-11-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Keys",
         "ds": "2024-12-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Keys",
         "ds": "2025-01-01",
-        "y": 0
+        "y": 6
       },
       {
         "category": "Keys",
         "ds": "2025-02-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Keys",
         "ds": "2025-03-01",
-        "y": 0
+        "y": 10
       },
       {
         "category": "Keys",
         "ds": "2025-04-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Keys",
         "ds": "2025-05-01",
-        "y": 0
+        "y": 14
       },
       {
         "category": "Keys",
         "ds": "2025-06-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Keys",
         "ds": "2025-07-01",
-        "y": 0
+        "y": 7
       },
       {
         "category": "Keys",
         "ds": "2025-08-01",
-        "y": 0
+        "y": 6
       },
       {
         "category": "Keys",
         "ds": "2025-09-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Keys",
         "ds": "2025-10-01",
-        "y": 0
+        "y": 4
       },
       {
         "category": "Keys",
         "ds": "2025-11-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Keys",
         "ds": "2025-12-01",
-        "y": 0
+        "y": 4
       },
       {
         "category": "Keys",
         "ds": "2026-01-01",
-        "y": 0
+        "y": 4
       },
       {
         "category": "Keys",
         "ds": "2026-02-01",
-        "y": 0
+        "y": 7
       },
       {
         "category": "Keys",
         "ds": "2026-03-01",
-        "y": 0
+        "y": 6
       },
       {
         "category": "Keys",
         "ds": "2026-04-01",
-        "y": 0
+        "y": 9
       },
       {
         "category": "Keys",
         "ds": "2026-05-01",
-        "y": 0
+        "y": 8
       },
       {
         "category": "Keys",
@@ -614,7 +614,7 @@
       {
         "category": "Other",
         "ds": "2024-12-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Other",
@@ -644,7 +644,7 @@
       {
         "category": "Other",
         "ds": "2025-06-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Other",
@@ -654,17 +654,17 @@
       {
         "category": "Other",
         "ds": "2025-08-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Other",
         "ds": "2025-09-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Other",
         "ds": "2025-10-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Other",
@@ -679,12 +679,12 @@
       {
         "category": "Other",
         "ds": "2026-01-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Other",
         "ds": "2026-02-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Other",
@@ -694,12 +694,12 @@
       {
         "category": "Other",
         "ds": "2026-04-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Other",
         "ds": "2026-05-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Other",
@@ -754,27 +754,27 @@
       {
         "category": "Phone",
         "ds": "2024-11-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Phone",
         "ds": "2024-12-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Phone",
         "ds": "2025-01-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Phone",
         "ds": "2025-02-01",
-        "y": 0
+        "y": 4
       },
       {
         "category": "Phone",
         "ds": "2025-03-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Phone",
@@ -784,7 +784,7 @@
       {
         "category": "Phone",
         "ds": "2025-05-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Phone",
@@ -794,7 +794,7 @@
       {
         "category": "Phone",
         "ds": "2025-07-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Phone",
@@ -804,7 +804,7 @@
       {
         "category": "Phone",
         "ds": "2025-09-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Phone",
@@ -814,37 +814,37 @@
       {
         "category": "Phone",
         "ds": "2025-11-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Phone",
         "ds": "2025-12-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Phone",
         "ds": "2026-01-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Phone",
         "ds": "2026-02-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Phone",
         "ds": "2026-03-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Phone",
         "ds": "2026-04-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Phone",
         "ds": "2026-05-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Phone",
@@ -899,82 +899,82 @@
       {
         "category": "Wallet",
         "ds": "2024-11-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Wallet",
         "ds": "2024-12-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Wallet",
         "ds": "2025-01-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Wallet",
         "ds": "2025-02-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Wallet",
         "ds": "2025-03-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Wallet",
         "ds": "2025-04-01",
-        "y": 0
+        "y": 4
       },
       {
         "category": "Wallet",
         "ds": "2025-05-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Wallet",
         "ds": "2025-06-01",
-        "y": 0
+        "y": 7
       },
       {
         "category": "Wallet",
         "ds": "2025-07-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Wallet",
         "ds": "2025-08-01",
-        "y": 0
+        "y": 5
       },
       {
         "category": "Wallet",
         "ds": "2025-09-01",
-        "y": 0
+        "y": 7
       },
       {
         "category": "Wallet",
         "ds": "2025-10-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Wallet",
         "ds": "2025-11-01",
-        "y": 0
+        "y": 1
       },
       {
         "category": "Wallet",
         "ds": "2025-12-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Wallet",
         "ds": "2026-01-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Wallet",
         "ds": "2026-02-01",
-        "y": 0
+        "y": 3
       },
       {
         "category": "Wallet",
@@ -984,12 +984,12 @@
       {
         "category": "Wallet",
         "ds": "2026-04-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Wallet",
         "ds": "2026-05-01",
-        "y": 0
+        "y": 2
       },
       {
         "category": "Wallet",
@@ -1027,16 +1027,84 @@
       "Wallet"
     ],
     "dataset": {
-      "name": "Uploaded historical data",
+      "name": "Historical practice data - synthetic gap scenario",
+      "dataset_kind": "synthetic_gap_scenario",
       "source": "historical",
       "record_type": "lost_items",
       "first_month": "2024-06-01",
       "last_month": "2026-10-01",
-      "total_records": 126,
-      "description": "Practice copy of external uploaded history, not DNSC records. Generated locations and statuses are retained as practice provenance; only Lost rows are counted. Generated Found statuses are excluded and are not evidence of Found reports. Boundary months excluded; absent months are zero under the existing user-confirmed assumption.",
-      "dataset_kind": "practice",
-      "source_file": "lost_found_practice_filled(1).csv",
-      "source_sha256": "793a64930215e58af599d80f9f279d1bd8332a69b7253882ca1a5b644c105510"
+      "total_records": 516,
+      "source_sha256": "91e5bae896ec6f9fb103faa2444935dc91ce306c0d25e0bc16c6fd6ed4828206",
+      "description": "Practice copy with all 145 original rows retained. The model uses 126 original eligible Lost records plus 390 generated Lost records across missing months November 2024-May 2026, totalling 516 records over June 2024-October 2026. First/last source months are excluded. Validation November 2025-April 2026 is entirely simulated. Test May-October 2026 has simulated May and five original-input months. These exploratory results are conditional on simulation assumptions and are not evidence of campus forecasting accuracy.",
+      "source_file": "lost_found_gap_scenario.csv",
+      "original_source_sha256": "df6e4a042633123d24be220aa367b40690326b3699aa324bac745ef4d42832f5",
+      "original_eligible_records": 126,
+      "synthetic_records": 390,
+      "preserved_original_rows": 145,
+      "original_input_months": [
+        "2024-06",
+        "2024-07",
+        "2024-08",
+        "2024-09",
+        "2024-10",
+        "2026-06",
+        "2026-07",
+        "2026-08",
+        "2026-09",
+        "2026-10"
+      ],
+      "simulated_months": [
+        "2024-11",
+        "2024-12",
+        "2025-01",
+        "2025-02",
+        "2025-03",
+        "2025-04",
+        "2025-05",
+        "2025-06",
+        "2025-07",
+        "2025-08",
+        "2025-09",
+        "2025-10",
+        "2025-11",
+        "2025-12",
+        "2026-01",
+        "2026-02",
+        "2026-03",
+        "2026-04",
+        "2026-05"
+      ],
+      "generation_seed": 20261117,
+      "generation_assumptions": {
+        "rate_prior": "Gamma(shape=0.5, rate=0.5); category observations from June-October 2024 only",
+        "rate_posterior": "One rate draw per category: Gamma(prior_shape + recorded count, rate=prior_rate + 5 months)",
+        "common_log_state": "0.6 * previous state + Normal(0, 0.18)",
+        "category_log_state": "0.65 * previous state + Normal(0, 0.15)",
+        "count_distribution": "Poisson with Gamma(shape=6, scale=expected_rate/6) intensity",
+        "expected_rate": "sampled category rate * exp(common state + category state)",
+        "calendar": "No assumed campus calendar, seasonality, population growth, or known reporting exposure",
+        "interpretation": "Persistence and variation are illustrative assumptions, not estimated campus behavior"
+      },
+      "sampled_monthly_category_rates": {
+        "Bag/Pack/Case": 0.7848363958762626,
+        "Electronics": 7.093877207299547,
+        "Jewelry": 2.1031175903334365,
+        "Keys": 5.374454661298278,
+        "Other": 0.7571428681641489,
+        "Phone": 0.9536307798475234,
+        "Wallet": 2.947387542011965
+      },
+      "evaluation_basis": "Exploratory synthetic gap scenario: validation November 2025-April 2026 is simulated; test May-October 2026 includes simulated May and five original-input months. Source targets were previously inspected; no real-world accuracy claim.",
+      "limitations": [
+        "Original input is already a practice file and is not independently verified campus ground truth.",
+        "The prior zero-gap assumption is replaced only for this historical practice scenario. Current campus records remain separate.",
+        "Only five early source months calibrate the rate prior; exposure/completeness is unknown.",
+        "Validation targets are simulated; the six-month test contains one simulated month.",
+        "Original-input-only diagnostics still use models trained partly on generated history.",
+        "No claim that any model or scenario is more accurate in real use.",
+        "Only one predetermined seed was generated; no parameters or seeds are tuned to evaluation results.",
+        "Source target months were inspected in earlier experiments; this is exploratory, not a fresh independent final test."
+      ]
     }
   },
   "found": {
