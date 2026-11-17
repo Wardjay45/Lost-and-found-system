@@ -582,10 +582,6 @@ button.metric-card:hover { border-color: var(--focus); }
 .category-trend-header h3 { font-size: 1rem; font-weight: 650; color: var(--lf-text-primary); }
 .category-trend-header p { font-size: .75rem; color: var(--lf-text-muted); margin-top: .25rem; }
 .category-trend-badge { display: inline-flex; padding: .3rem .55rem; border-radius: .4rem; background: var(--lf-10-bg); color: var(--lf-text-primary); font-size: .7rem; white-space: nowrap; border: 1px solid var(--lf-30-border); }
-.category-trend-summary { display: flex; flex-direction: column; align-items: flex-end; gap: .35rem; min-width: 0; max-width: 100%; }
-.category-trend-expected { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; gap: .35rem; color: var(--lf-text-muted); font-size: .78rem; }
-.category-trend-expected strong { color: var(--lf-text-primary); font-size: 1.25rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.category-trend-model { color: var(--lf-text-muted); font-size: .7rem; text-align: right; overflow-wrap: anywhere; }
 .category-trend-plot { height: 205px; position: relative; padding: .5rem .8rem 0; }
 .category-trend-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .35rem; margin-top: .5rem; padding: .75rem 1.1rem; border-top: 1px solid var(--lf-30-border); color: var(--lf-text-muted); font-size: .7rem; background: var(--surface-subtle); }
 .category-trend-empty { min-height: 245px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .5rem; padding: 1.25rem; color: var(--lf-text-muted); text-align: center; }
@@ -593,7 +589,6 @@ button.metric-card:hover { border-color: var(--focus); }
 .high-contrast .category-trend-card { border-width: 2px; }
 @media (min-width: 1600px) { .category-trend-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 850px) { .category-trend-grid { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 480px) { .category-trend-summary { align-items: flex-start; } .category-trend-expected { justify-content: flex-start; } .category-trend-model { text-align: left; } }
 
 .item-photo { display: inline-flex; flex: 0 0 auto; width: 56px; height: 56px; align-items: center; justify-content: center; overflow: hidden; border-radius: .65rem; border: 1px solid var(--lf-30-border); background: var(--surface-subtle); vertical-align: middle; }
 .item-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
